@@ -1,7 +1,22 @@
-<div class="container" style="padding: 20px; max-width: 600px; margin: auto">
+<div class="container" style="padding: 20px; max-width: 900px; margin: auto">
+  <div
+    style="
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: #4a148c;
+    "
+  >
+    <mat-icon>account_circle</mat-icon>
+    <strong>{{ currentUser.firstName }} {{ currentUser.lastName }}</strong>
+  </div>
+
   <h1 class="header-center">ManageMe 🚀</h1>
 
   <mat-card style="padding: 20px; margin-bottom: 20px">
+    <mat-card-title style="margin-bottom: 15px; font-size: 1.1em">Nowy Projekt</mat-card-title>
     <div style="display: flex; flex-direction: column; gap: 10px">
       <mat-form-field appearance="outline" color="primary">
         <mat-label>Nazwa projektu</mat-label>
@@ -17,6 +32,133 @@
     </div>
   </mat-card>
 
+  <mat-form-field appearance="fill" style="width: 100%; margin-bottom: 20px">
+    <mat-label>Wybierz projekt do pracy</mat-label>
+    <mat-select (selectionChange)="selectProject($event.value)" [value]="currentProjectId()">
+      @for (p of projects(); track p.id) {
+        <mat-option [value]="p.id">{{ p.name }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <hr style="border: 0.5px solid #eee; margin-bottom: 20px" />
+
+  @if (currentProjectId()) {
+    <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
+      <mat-card-header>
+        <mat-card-title>Dodaj nową funkcjonalność do: {{ getActiveProjectName() }}</mat-card-title>
+      </mat-card-header>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px">
+        <mat-form-field appearance="outline">
+          <mat-label>Nazwa historyjki</mat-label>
+          <input matInput [(ngModel)]="storyName" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Opis zadań</mat-label>
+          <textarea matInput [(ngModel)]="storyDesc"></textarea>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Priorytet</mat-label>
+          <mat-select [(ngModel)]="storyPriority">
+            <mat-option value="niski">Niski</mat-option>
+            <mat-option value="średni">Średni</mat-option>
+            <mat-option value="wysoki">Wysoki</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-raised-button color="primary" (click)="addStory()">Zapisz historyjkę</button>
+      </div>
+    </mat-card>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px">
+      <div class="column">
+        <h3 class="header-center">DO ZROBIENIA</h3>
+        @for (s of getStoriesByState('todo'); track s.id) {
+          <mat-card class="story-card" style="margin-bottom: 10px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                padding: 10px 10px 0 16px;
+              "
+            >
+              <div>
+                <mat-card-subtitle style="margin: 0">{{
+                  s.priority | uppercase
+                }}</mat-card-subtitle>
+                <mat-card-title style="font-size: 1.1rem; margin: 0">{{ s.name }}</mat-card-title>
+              </div>
+              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+            <mat-card-content
+              ><p>{{ s.description }}</p></mat-card-content
+            >
+            <mat-card-actions>
+              <button mat-button color="primary" (click)="changeState(s, 'doing')">
+                ROZPOCZNIJ
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        }
+      </div>
+
+      <div class="column">
+        <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
+        @for (s of getStoriesByState('doing'); track s.id) {
+          <mat-card class="story-card" style="border-top: 3px solid #9c27b0; margin-bottom: 10px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 10px 0 16px;
+              "
+            >
+              <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
+              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+            <mat-card-actions>
+              <button mat-button (click)="changeState(s, 'done')">ZAKOŃCZ</button>
+            </mat-card-actions>
+          </mat-card>
+        }
+      </div>
+
+      <div class="column">
+        <h3 class="header-center" style="color: green">ZAMKNIĘTE</h3>
+        @for (s of getStoriesByState('done'); track s.id) {
+          <mat-card class="story-card" style="opacity: 0.6; margin-bottom: 10px">
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 10px 0 16px;
+              "
+            >
+              <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
+              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+            <mat-card-content style="text-align: center; padding-bottom: 10px">
+              <mat-icon style="color: green">check_circle</mat-icon>
+            </mat-card-content>
+          </mat-card>
+        }
+      </div>
+    </div>
+  }
+
+  <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
   <div style="display: flex; flex-direction: column; gap: 12px">
     @for (item of projects(); track item.id) {
       <mat-card
@@ -30,10 +172,6 @@
           <mat-icon>delete_sweep</mat-icon>
         </button>
       </mat-card>
-    } @empty {
-      <p style="text-align: center; color: #9c27b0; font-style: italic">
-        Lista jest pusta. Czas coś zaplanować!
-      </p>
     }
   </div>
 </div>

@@ -13,3 +13,34 @@
 button[mat-icon-button]:hover {
   background-color: rgba(244, 67, 54, 0.1);
 }
+
+.story-column {
+  background: rgba(0, 0, 0, 0.03);
+  padding: 10px;
+  border-radius: 8px;
+  min-height: 200px;
+}
+
+.story-card {
+  margin-bottom: 12px;
+  padding: 10px !important;
+}
+
+.priority-wysoki {
+  color: #d32f2f;
+  font-weight: bold;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+.priority-średni {
+  color: #f57c00;
+  font-weight: bold;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+.priority-niski {
+  color: #388e3c;
+  font-weight: bold;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
