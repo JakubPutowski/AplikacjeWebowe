@@ -2,15 +2,31 @@
   <div
     style="
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       align-items: center;
       gap: 10px;
       margin-bottom: 10px;
       color: #4a148c;
     "
   >
-    <mat-icon>account_circle</mat-icon>
-    <strong>{{ currentUser.firstName }} {{ currentUser.lastName }}</strong>
+    <div style="display: flex; align-items: center; gap: 10px">
+      <mat-icon>account_circle</mat-icon>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <strong>{{ currentUser.firstName }} {{ currentUser.lastName }}</strong>
+        <span style="font-size: 0.85em; opacity: 0.8">{{ currentUser.role }}</span>
+      </div>
+    </div>
+
+    <mat-form-field appearance="outline" style="min-width: 260px">
+      <mat-label>Użytkownik</mat-label>
+      <mat-select [value]="currentUser.id" (selectionChange)="setCurrentUser($event.value)">
+        @for (u of users(); track u.id) {
+          <mat-option [value]="u.id">
+            {{ u.firstName }} {{ u.lastName }} ({{ u.role }})
+          </mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
   </div>
 
   <h1 class="header-center">ManageMe 🚀</h1>
@@ -46,7 +62,9 @@
   @if (currentProjectId()) {
     <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
       <mat-card-header>
-        <mat-card-title>Dodaj nową funkcjonalność do: {{ getActiveProjectName() }}</mat-card-title>
+        <mat-card-title>
+          Dodaj nową funkcjonalność do: {{ getActiveProjectName() }}
+        </mat-card-title>
       </mat-card-header>
 
       <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px">
@@ -73,11 +91,15 @@
       </div>
     </mat-card>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 10px">
       <div class="column">
         <h3 class="header-center">DO ZROBIENIA</h3>
         @for (s of getStoriesByState('todo'); track s.id) {
-          <mat-card class="story-card" style="margin-bottom: 10px">
+          <mat-card
+            class="story-card"
+            style="margin-bottom: 10px; cursor: pointer"
+            (click)="selectStory(s.id)"
+          >
             <div
               style="
                 display: flex;
@@ -87,23 +109,18 @@
               "
             >
               <div>
-                <mat-card-subtitle style="margin: 0">{{
-                  s.priority | uppercase
-                }}</mat-card-subtitle>
+                <mat-card-subtitle style="margin: 0">{{ s.priority | uppercase }}</mat-card-subtitle>
                 <mat-card-title style="font-size: 1.1rem; margin: 0">{{ s.name }}</mat-card-title>
               </div>
-              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="$event.stopPropagation(); removeStory(s.id)"
+              >
                 <mat-icon>delete</mat-icon>
               </button>
             </div>
-            <mat-card-content
-              ><p>{{ s.description }}</p></mat-card-content
-            >
-            <mat-card-actions>
-              <button mat-button color="primary" (click)="changeState(s, 'doing')">
-                ROZPOCZNIJ
-              </button>
-            </mat-card-actions>
+            <mat-card-content><p>{{ s.description }}</p></mat-card-content>
           </mat-card>
         }
       </div>
@@ -111,7 +128,11 @@
       <div class="column">
         <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
         @for (s of getStoriesByState('doing'); track s.id) {
-          <mat-card class="story-card" style="border-top: 3px solid #9c27b0; margin-bottom: 10px">
+          <mat-card
+            class="story-card"
+            style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
+            (click)="selectStory(s.id)"
+          >
             <div
               style="
                 display: flex;
@@ -121,13 +142,15 @@
               "
             >
               <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
-              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="$event.stopPropagation(); removeStory(s.id)"
+              >
                 <mat-icon>delete</mat-icon>
               </button>
             </div>
-            <mat-card-actions>
-              <button mat-button (click)="changeState(s, 'done')">ZAKOŃCZ</button>
-            </mat-card-actions>
+            <mat-card-content><p style="margin: 0">{{ s.description }}</p></mat-card-content>
           </mat-card>
         }
       </div>
@@ -135,7 +158,11 @@
       <div class="column">
         <h3 class="header-center" style="color: green">ZAMKNIĘTE</h3>
         @for (s of getStoriesByState('done'); track s.id) {
-          <mat-card class="story-card" style="opacity: 0.6; margin-bottom: 10px">
+          <mat-card
+            class="story-card"
+            style="opacity: 0.6; margin-bottom: 10px; cursor: pointer"
+            (click)="selectStory(s.id)"
+          >
             <div
               style="
                 display: flex;
@@ -145,7 +172,11 @@
               "
             >
               <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
-              <button mat-icon-button color="warn" (click)="removeStory(s.id)">
+              <button
+                mat-icon-button
+                color="warn"
+                (click)="$event.stopPropagation(); removeStory(s.id)"
+              >
                 <mat-icon>delete</mat-icon>
               </button>
             </div>
@@ -156,6 +187,228 @@
         }
       </div>
     </div>
+
+    @if (currentStoryId()) {
+      <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
+        <mat-card-header>
+          <mat-card-title>Zadania dla: {{ getActiveStoryName() }}</mat-card-title>
+        </mat-card-header>
+
+        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px">
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <h3 class="header-center" style="margin: 0">Dodaj zadanie</h3>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Nazwa zadania</mat-label>
+              <input matInput [(ngModel)]="taskName" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Opis zadania</mat-label>
+              <textarea matInput [(ngModel)]="taskDesc"></textarea>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Priorytet</mat-label>
+              <mat-select [(ngModel)]="taskPriority">
+                <mat-option value="niski">Niski</mat-option>
+                <mat-option value="średni">Średni</mat-option>
+                <mat-option value="wysoki">Wysoki</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Przewidywany czas (godz.)</mat-label>
+              <input matInput type="number" [(ngModel)]="taskExpectedHours" min="0.1" step="0.1" />
+            </mat-form-field>
+
+            @if (isAdmin()) {
+              <p style="margin: 0; opacity: 0.8">
+                Admin nie realizuje zadań. Start i zakończenie zadań wykonują role `devops` i `developer`.
+              </p>
+            }
+
+            <button mat-raised-button color="primary" (click)="addTask()" [disabled]="isAdmin()">
+              Dodaj zadanie
+            </button>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px">
+            <div class="column">
+              <h3 class="header-center">TODO</h3>
+
+              @for (t of getTasksByState('todo'); track t.id) {
+                <mat-card
+                  class="story-card"
+                  style="margin-bottom: 10px; cursor: pointer"
+                  (click)="selectTask(t.id)"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: flex-start;
+                      padding: 10px 10px 0 16px;
+                    "
+                  >
+                    <div>
+                      <mat-card-subtitle style="margin: 0">{{ t.priority | uppercase }}</mat-card-subtitle>
+                      <mat-card-title style="font-size: 1.1rem; margin: 0">{{ t.name }}</mat-card-title>
+                    </div>
+                    <button
+                      mat-icon-button
+                      color="warn"
+                      (click)="$event.stopPropagation(); removeTask(t.id)"
+                      [disabled]="isAdmin()"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+
+                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
+
+                  <mat-card-content style="padding-top: 0">
+                    <p style="margin: 0">Przewidywane: {{ t.expectedHours }} h</p>
+                    <p style="margin: 6px 0 0 0; opacity: 0.8">
+                      Dodano: {{ formatDate(t.addedAt) }}
+                    </p>
+                  </mat-card-content>
+
+                  @if (!isAdmin()) {
+                    <mat-card-actions>
+                      <button mat-button color="primary" (click)="$event.stopPropagation(); startTask(t.id)">
+                        ROZPOCZNIJ
+                      </button>
+                    </mat-card-actions>
+                  }
+                </mat-card>
+              }
+            </div>
+
+            <div class="column">
+              <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
+
+              @for (t of getTasksByState('doing'); track t.id) {
+                <mat-card
+                  class="story-card"
+                  style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
+                  (click)="selectTask(t.id)"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 10px 10px 0 16px;
+                    "
+                  >
+                    <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
+                    <button
+                      mat-icon-button
+                      color="warn"
+                      (click)="$event.stopPropagation(); removeTask(t.id)"
+                      [disabled]="isAdmin()"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+
+                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
+
+                  <mat-card-content style="padding-top: 0">
+                    <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
+                    <p style="margin: 6px 0 0 0; opacity: 0.8">Start: {{ formatDate(t.startAt) }}</p>
+                  </mat-card-content>
+
+                  @if (!isAdmin()) {
+                    <mat-card-actions>
+                      <button mat-button (click)="$event.stopPropagation(); completeTask(t.id)">
+                        ZAKOŃCZ
+                      </button>
+                    </mat-card-actions>
+                  }
+                </mat-card>
+              }
+            </div>
+
+            <div class="column">
+              <h3 class="header-center" style="color: green">DONE</h3>
+
+              @for (t of getTasksByState('done'); track t.id) {
+                <mat-card
+                  class="story-card"
+                  style="opacity: 0.7; margin-bottom: 10px; cursor: pointer"
+                  (click)="selectTask(t.id)"
+                >
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 10px 10px 0 16px;
+                    "
+                  >
+                    <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
+                    <button
+                      mat-icon-button
+                      color="warn"
+                      (click)="$event.stopPropagation(); removeTask(t.id)"
+                      [disabled]="isAdmin()"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+
+                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
+
+                  <mat-card-content style="padding-top: 0">
+                    <div style="text-align: center; padding-bottom: 8px">
+                      <mat-icon style="color: green">check_circle</mat-icon>
+                    </div>
+                    <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
+                    <p style="margin: 6px 0 0 0; opacity: 0.85">Koniec: {{ formatDate(t.endAt) }}</p>
+                    <p style="margin: 6px 0 0 0; font-weight: 600">
+                      Zrealizowane: {{ formatHours(t.actualHours) }}
+                    </p>
+                  </mat-card-content>
+                </mat-card>
+              }
+            </div>
+          </div>
+
+          @if (selectedTaskId()) {
+            <mat-card style="margin-top: 10px; padding: 15px; background: rgba(0, 0, 0, 0.02)">
+              <h3 style="margin: 0 0 10px 0">Szczegóły zadania</h3>
+
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                @for (line of [
+                  { k: 'Nazwa', v: getSelectedTask()?.name ?? '-' },
+                  { k: 'Opis', v: getSelectedTask()?.description ?? '-' },
+                  { k: 'Priorytet', v: (getSelectedTask()?.priority ?? '-') },
+                  { k: 'Przewidywane', v: formatHours(getSelectedTask()?.expectedHours ?? null) },
+                  { k: 'Stan', v: getSelectedTask()?.state ?? '-' },
+                  { k: 'Historyjka', v: getActiveStoryName() ?? '-' },
+                  { k: 'Dodano', v: formatDate(getSelectedTask()?.addedAt ?? null) },
+                  { k: 'Start', v: formatDate(getSelectedTask()?.startAt ?? null) },
+                  { k: 'Koniec', v: formatDate(getSelectedTask()?.endAt ?? null) },
+                  { k: 'Zrealizowane roboczogodziny', v: formatHours(getSelectedTask()?.actualHours ?? null) },
+                  { k: 'Osoba odpowiedzialna', v: getUserName(getSelectedTask()?.responsibleUserId ?? null) },
+                ]; track line.k) {
+                  <div style="display: flex; gap: 10px">
+                    <strong style="min-width: 260px">{{ line.k }}:</strong>
+                    <span>{{ line.v }}</span>
+                  </div>
+                }
+              </div>
+
+              <div style="margin-top: 15px">
+                <button mat-button (click)="clearSelectedTask()">Zamknij</button>
+              </div>
+            </mat-card>
+          }
+        </div>
+      </mat-card>
+    }
   }
 
   <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
