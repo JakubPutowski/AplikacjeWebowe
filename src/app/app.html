@@ -17,16 +17,27 @@
       </div>
     </div>
 
-    <mat-form-field appearance="outline" style="min-width: 260px">
-      <mat-label>Użytkownik</mat-label>
-      <mat-select [value]="currentUser.id" (selectionChange)="setCurrentUser($event.value)">
-        @for (u of users(); track u.id) {
-          <mat-option [value]="u.id">
-            {{ u.firstName }} {{ u.lastName }} ({{ u.role }})
-          </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end">
+      <mat-form-field appearance="outline" style="min-width: 220px">
+        <mat-label>Motyw</mat-label>
+        <mat-select [value]="themeMode()" (selectionChange)="setThemeMode($event.value)">
+          <mat-option value="system">System</mat-option>
+          <mat-option value="light">Jasny</mat-option>
+          <mat-option value="dark">Ciemny</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" style="min-width: 260px">
+        <mat-label>Użytkownik</mat-label>
+        <mat-select [value]="currentUser.id" (selectionChange)="setCurrentUser($event.value)">
+          @for (u of users(); track u.id) {
+            <mat-option [value]="u.id">
+              {{ u.firstName }} {{ u.lastName }} ({{ u.role }})
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
   </div>
 
   <h1 class="header-center">ManageMe 🚀</h1>
