@@ -7,9 +7,27 @@
 
 html {
   height: 100%;
+}
+
+:root {
   @include mat.theme(
     (
       color: (
+        theme-type: light,
+        primary: mat.$magenta-palette,
+        tertiary: mat.$violet-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+:root[data-theme='dark'] {
+  @include mat.theme(
+    (
+      color: (
+        theme-type: dark,
         primary: mat.$magenta-palette,
         tertiary: mat.$violet-palette,
       ),
@@ -20,11 +38,6 @@ html {
 }
 
 body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
-
   // Set a default background, font and text colors for the application using
   // Angular Material's system-level CSS variables. Learn more about these
   // variables at https://material.angular.dev/guide/system-variables
@@ -35,4 +48,12 @@ body {
   // Reset the user agent margin.
   margin: 0;
   height: 100%;
+}
+
+html[data-theme='light'] body {
+  color-scheme: light;
+}
+
+html[data-theme='dark'] body {
+  color-scheme: dark;
 }

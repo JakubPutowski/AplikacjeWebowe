@@ -12,6 +12,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatOptionModule } from '@angular/material/core';
 import { CommonModule } from '@angular/common';
 import { Task, TaskPriority, TaskState } from './task.model';
+import { ThemeMode, ThemeService } from './theme.service';
 
 @Component({
   selector: 'app-root',
@@ -32,9 +33,11 @@ import { Task, TaskPriority, TaskState } from './task.model';
 })
 export class App implements OnInit {
   private projectService = inject(ProjectService);
+  private themeService = inject(ThemeService);
 
   currentUser = this.projectService.getCurrentUser();
   users = signal<User[]>([]);
+  themeMode = signal<ThemeMode>('system');
 
   currentProjectId = signal<string | null>(null);
 
@@ -59,6 +62,7 @@ export class App implements OnInit {
   taskExpectedHours = 1;
 
   ngOnInit() {
+    this.themeMode.set(this.themeService.init());
     this.refreshList();
     this.refreshUsers();
 
@@ -147,6 +151,11 @@ export class App implements OnInit {
     this.currentUser = this.projectService.getCurrentUser();
     this.refreshUsers();
     this.refreshTasks();
+  }
+
+  setThemeMode(mode: ThemeMode) {
+    this.themeService.setMode(mode);
+    this.themeMode.set(mode);
   }
 
   addStory() {
