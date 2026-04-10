@@ -1,9 +1,13 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { ProjectModel, Story, StoryState, User } from './project.model';
 import { Task } from './task.model';
+import { NotificationPriority } from './notification.model';
+import { NotificationService } from './notification.service';
 
 @Injectable({ providedIn: 'root' })
 export class ProjectService {
+  private notificationService = inject(NotificationService);
+
   private LS_KEY = 'projects_data';
   private STORIES_KEY = 'stories_data';
   private CURRENT_PROJ_KEY = 'current_project_id';
@@ -68,6 +72,8 @@ export class ProjectService {
     const projects = this.getProjects();
     const newProject = { ...project, id: crypto.randomUUID() };
     this.setToStorage(this.LS_KEY, [...projects, newProject]);
+
+    this.notifyProjectCreated(newProject.name);
   }
 
   deleteProject(id: string): void {
@@ -137,6 +143,8 @@ export class ProjectService {
       createdAt: new Date(),
     };
     this.setToStorage(this.STORIES_KEY, [...all, newStory]);
+
+    this.notifyStoryAssigned(newStory);
   }
 
   deleteStory(storyId: string): void {
@@ -180,6 +188,8 @@ export class ProjectService {
     // Po dodaniu zadania story musi się przeliczyć:
     // jeśli historyjka była w `done`, dodanie nowego taska (todo) ma ją cofnąć do `doing`.
     this.recalcStoryState(newTask.storyId);
+
+    this.notifyTaskAdded(newTask);
   }
 
   deleteTask(taskId: string): void {
@@ -190,6 +200,8 @@ export class ProjectService {
     this.setToStorage(this.TASKS_KEY, filtered);
 
     this.recalcStoryState(task.storyId);
+
+    this.notifyTaskDeleted(task);
   }
 
   startTask(taskId: string, userId: string): void {
@@ -211,6 +223,9 @@ export class ProjectService {
     this.setToStorage(this.TASKS_KEY, next);
 
     this.recalcStoryState(task.storyId);
+
+    this.notifyTaskAssigned(updated);
+    this.notifyTaskStatusChanged(updated, 'doing');
   }
 
   completeTask(taskId: string): void {
@@ -235,6 +250,8 @@ export class ProjectService {
     this.setToStorage(this.TASKS_KEY, next);
 
     this.recalcStoryState(task.storyId);
+
+    this.notifyTaskStatusChanged(updated, 'done');
   }
 
   private recalcStoryState(storyId: string): void {
@@ -259,5 +276,82 @@ export class ProjectService {
     if (stories[idx].state === newState) return;
     stories[idx] = { ...stories[idx], state: newState };
     this.setToStorage(this.STORIES_KEY, stories);
+  }
+
+  private notifyProjectCreated(projectName: string): void {
+    const adminIds = this.getUsers()
+      .filter((user) => user.role === 'admin')
+      .map((user) => user.id);
+
+    this.notificationService.sendToUsers(adminIds, {
+      title: 'Utworzono nowy projekt',
+      message: `Projekt \"${projectName}\" został utworzony.`,
+      priority: 'high',
+    });
+  }
+
+  private notifyStoryAssigned(story: Story): void {
+    this.notificationService.sendToUser({
+      title: 'Przypisanie do historyjki',
+      message: `Zostałeś przypisany do historyjki \"${story.name}\".`,
+      priority: this.mapDomainPriority(story.priority),
+      recipientId: story.ownerId,
+    });
+  }
+
+  private notifyTaskAssigned(task: Task): void {
+    if (!task.responsibleUserId) return;
+
+    this.notificationService.sendToUser({
+      title: 'Przypisanie do zadania',
+      message: `Przypisano Ci zadanie \"${task.name}\".`,
+      priority: this.mapDomainPriority(task.priority),
+      recipientId: task.responsibleUserId,
+    });
+  }
+
+  private notifyTaskAdded(task: Task): void {
+    const story = this.getStories().find((item) => item.id === task.storyId);
+    if (!story) return;
+
+    this.notificationService.sendToUser({
+      title: 'Nowe zadanie w historyjce',
+      message: `Dodano zadanie \"${task.name}\" w historyjce \"${story.name}\".`,
+      priority: this.mapDomainPriority(task.priority),
+      recipientId: story.ownerId,
+    });
+  }
+
+  private notifyTaskDeleted(task: Task): void {
+    const story = this.getStories().find((item) => item.id === task.storyId);
+    if (!story) return;
+
+    this.notificationService.sendToUser({
+      title: 'Usunięto zadanie z historyjki',
+      message: `Usunięto zadanie \"${task.name}\" z historyjki \"${story.name}\".`,
+      priority: this.mapDomainPriority(task.priority),
+      recipientId: story.ownerId,
+    });
+  }
+
+  private notifyTaskStatusChanged(task: Task, nextState: 'doing' | 'done'): void {
+    const story = this.getStories().find((item) => item.id === task.storyId);
+    if (!story) return;
+
+    const priority = nextState === 'done' ? 'medium' : 'low';
+    const statusLabel = nextState === 'done' ? 'DONE' : 'DOING';
+
+    this.notificationService.sendToUser({
+      title: 'Zmiana statusu zadania',
+      message: `Zadanie \"${task.name}\" zmieniło status na ${statusLabel}.`,
+      priority,
+      recipientId: story.ownerId,
+    });
+  }
+
+  private mapDomainPriority(value: 'niski' | 'średni' | 'wysoki'): NotificationPriority {
+    if (value === 'wysoki') return 'high';
+    if (value === 'średni') return 'medium';
+    return 'low';
   }
 }

@@ -15,6 +15,11 @@
         <strong>{{ currentUser.firstName }} {{ currentUser.lastName }}</strong>
         <span style="font-size: 0.85em; opacity: 0.8">{{ currentUser.role }}</span>
       </div>
+
+      <app-notification-badge
+        [count]="unreadNotificationsCount()"
+        (openList)="goToNotifications()"
+      ></app-notification-badge>
     </div>
 
     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end">
@@ -41,6 +46,16 @@
   </div>
 
   <h1 class="header-center">ManageMe 🚀</h1>
+
+  <div class="top-menu">
+    <button mat-button (click)="goToBoard()" [disabled]="activeView() === 'board'">Tablica</button>
+    <button mat-button (click)="goToNotifications()" [disabled]="activeView() === 'notifications'">
+      Powiadomienia
+    </button>
+    <span class="top-menu__unread">Nieprzeczytane: {{ unreadNotificationsCount() }}</span>
+  </div>
+
+  @if (activeView() === 'board') {
 
   <mat-card style="padding: 20px; margin-bottom: 20px">
     <mat-card-title style="margin-bottom: 15px; font-size: 1.1em">Nowy Projekt</mat-card-title>
@@ -422,20 +437,96 @@
     }
   }
 
-  <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
-  <div style="display: flex; flex-direction: column; gap: 12px">
-    @for (item of projects(); track item.id) {
-      <mat-card
-        style="padding: 15px; display: flex; justify-content: space-between; align-items: center"
+    <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      @for (item of projects(); track item.id) {
+        <mat-card
+          style="padding: 15px; display: flex; justify-content: space-between; align-items: center"
+        >
+          <div>
+            <strong style="font-size: 1.2em; color: #4a148c">{{ item.name }}</strong>
+            <p style="margin: 5px 0 0 0; color: #666">{{ item.description }}</p>
+          </div>
+          <button mat-icon-button color="warn" (click)="deleteProject(item.id)">
+            <mat-icon>delete_sweep</mat-icon>
+          </button>
+        </mat-card>
+      }
+    </div>
+  }
+
+  @if (activeView() === 'notifications') {
+    <mat-card style="padding: 20px; margin-top: 20px">
+      <div
+        style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap"
       >
-        <div>
-          <strong style="font-size: 1.2em; color: #4a148c">{{ item.name }}</strong>
-          <p style="margin: 5px 0 0 0; color: #666">{{ item.description }}</p>
-        </div>
-        <button mat-icon-button color="warn" (click)="deleteProject(item.id)">
-          <mat-icon>delete_sweep</mat-icon>
+        <h2 style="margin: 0">Powiadomienia</h2>
+        <button mat-flat-button color="primary" (click)="markAllNotificationsAsRead()">
+          Oznacz wszystkie jako przeczytane
         </button>
-      </mat-card>
-    }
-  </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px">
+        @if (notifications().length === 0) {
+          <p style="margin: 0; opacity: 0.8">Brak powiadomień.</p>
+        }
+
+        @for (item of notifications(); track item.id) {
+          <mat-card class="notification-card" [class.notification-card--read]="item.isRead">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px">
+              <div style="display: flex; flex-direction: column; gap: 6px">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                  <strong>{{ item.title }}</strong>
+                  <span class="notification-priority" [attr.data-priority]="item.priority">
+                    {{ getNotificationPriorityLabel(item.priority) }}
+                  </span>
+                  @if (!item.isRead) {
+                    <span class="notification-unread-dot" aria-label="Nieprzeczytane"></span>
+                  }
+                </div>
+                <span style="opacity: 0.85">{{ item.message }}</span>
+                <small style="opacity: 0.8">{{ formatDate(item.date) }}</small>
+              </div>
+
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end">
+                <button mat-button (click)="openNotificationDetail(item.id)">Szczegóły</button>
+                <button mat-button (click)="markNotificationAsRead(item.id)" [disabled]="item.isRead">
+                  Oznacz jako przeczytane
+                </button>
+              </div>
+            </div>
+          </mat-card>
+        }
+      </div>
+    </mat-card>
+  }
+
+  @if (activeView() === 'notification-detail') {
+    <mat-card style="padding: 20px; margin-top: 20px">
+      @if (getSelectedNotification(); as item) {
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+          <h2 style="margin: 0">{{ item.title }}</h2>
+          <span class="notification-priority" [attr.data-priority]="item.priority">
+            {{ getNotificationPriorityLabel(item.priority) }}
+          </span>
+        </div>
+
+        <p style="margin-top: 14px">{{ item.message }}</p>
+        <p style="opacity: 0.8">Data utworzenia: {{ formatDate(item.date) }}</p>
+        <p style="opacity: 0.8">Status: {{ item.isRead ? 'Przeczytane' : 'Nieprzeczytane' }}</p>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap">
+          <button mat-button (click)="goToNotifications()">Wróć do listy</button>
+          <button mat-flat-button color="primary" (click)="markNotificationAsRead(item.id)" [disabled]="item.isRead">
+            Oznacz jako przeczytane
+          </button>
+        </div>
+      } @else {
+        <p style="margin: 0">Nie znaleziono powiadomienia.</p>
+        <div style="margin-top: 12px">
+          <button mat-button (click)="goToNotifications()">Wróć do listy</button>
+        </div>
+      }
+    </mat-card>
+  }
 </div>

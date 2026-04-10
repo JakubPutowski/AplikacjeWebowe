@@ -1,5 +1,6 @@
-import { Component, signal, OnInit, inject } from '@angular/core';
+import { Component, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { ProjectService } from './project';
 import { ProjectModel } from './project.model';
 import { Story, StoryPriority, StoryState, User } from './project.model';
@@ -7,12 +8,17 @@ import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatOptionModule } from '@angular/material/core';
 import { CommonModule } from '@angular/common';
 import { Task, TaskPriority, TaskState } from './task.model';
 import { ThemeMode, ThemeService } from './theme.service';
+import { Notification } from './notification.model';
+import { NotificationService } from './notification.service';
+import { NotificationBadgeComponent } from './notification-badge.component';
+import { NotificationDialogComponent } from './notification-dialog.component';
 
 @Component({
   selector: 'app-root',
@@ -24,20 +30,32 @@ import { ThemeMode, ThemeService } from './theme.service';
     MatFormFieldModule,
     MatButtonModule,
     MatCardModule,
+    MatDialogModule,
     MatIconModule,
     MatSelectModule,
     MatOptionModule,
+    NotificationBadgeComponent,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   private projectService = inject(ProjectService);
   private themeService = inject(ThemeService);
+  private notificationService = inject(NotificationService);
+  private dialog = inject(MatDialog);
+
+  private notificationCreatedSub?: Subscription;
+  private notificationChangedSub?: Subscription;
 
   currentUser = this.projectService.getCurrentUser();
   users = signal<User[]>([]);
   themeMode = signal<ThemeMode>('system');
+
+  activeView = signal<'board' | 'notifications' | 'notification-detail'>('board');
+  notifications = signal<Notification[]>([]);
+  selectedNotificationId = signal<string | null>(null);
+  unreadNotificationsCount = signal(0);
 
   currentProjectId = signal<string | null>(null);
 
@@ -65,6 +83,28 @@ export class App implements OnInit {
     this.themeMode.set(this.themeService.init());
     this.refreshList();
     this.refreshUsers();
+    this.refreshNotifications();
+
+    this.notificationCreatedSub = this.notificationService.created$.subscribe((notification) => {
+      this.refreshNotifications();
+      if (!this.shouldOpenNotificationDialog(notification)) return;
+
+      this.dialog
+        .open(NotificationDialogComponent, {
+          width: '440px',
+          data: { notification },
+        })
+        .afterClosed()
+        .subscribe((result) => {
+          if (result === 'open-notifications') {
+            this.goToNotifications();
+          }
+        });
+    });
+
+    this.notificationChangedSub = this.notificationService.changed$.subscribe(() => {
+      this.refreshNotifications();
+    });
 
     const savedProjectId = this.projectService.getCurrentProjectId();
 
@@ -72,6 +112,11 @@ export class App implements OnInit {
       this.currentProjectId.set(savedProjectId);
       this.refreshStories();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.notificationCreatedSub?.unsubscribe();
+    this.notificationChangedSub?.unsubscribe();
   }
 
   refreshList() {
@@ -97,6 +142,25 @@ export class App implements OnInit {
       this.tasks.set(this.projectService.getTasksForStory(sId));
     } else {
       this.tasks.set([]);
+    }
+  }
+
+  refreshNotifications() {
+    const currentRecipientId = this.currentUser.id;
+    this.notifications.set(this.notificationService.getNotificationsForRecipient(currentRecipientId));
+    this.unreadNotificationsCount.set(
+      this.notificationService.getUnreadCountForRecipient(currentRecipientId)
+    );
+
+    const selectedId = this.selectedNotificationId();
+    if (!selectedId) return;
+
+    const exists = this.notifications().some((item) => item.id === selectedId);
+    if (exists) return;
+
+    this.selectedNotificationId.set(null);
+    if (this.activeView() === 'notification-detail') {
+      this.activeView.set('notifications');
     }
   }
 
@@ -151,6 +215,7 @@ export class App implements OnInit {
     this.currentUser = this.projectService.getCurrentUser();
     this.refreshUsers();
     this.refreshTasks();
+    this.refreshNotifications();
   }
 
   setThemeMode(mode: ThemeMode) {
@@ -291,5 +356,49 @@ export class App implements OnInit {
 
   clearSelectedTask() {
     this.selectedTaskId.set(null);
+  }
+
+  goToBoard() {
+    this.activeView.set('board');
+  }
+
+  goToNotifications() {
+    this.refreshNotifications();
+    this.activeView.set('notifications');
+  }
+
+  openNotificationDetail(notificationId: string) {
+    this.notificationService.markAsReadForRecipient(notificationId, this.currentUser.id);
+    this.selectedNotificationId.set(notificationId);
+    this.refreshNotifications();
+    this.activeView.set('notification-detail');
+  }
+
+  markNotificationAsRead(notificationId: string) {
+    this.notificationService.markAsReadForRecipient(notificationId, this.currentUser.id);
+    this.refreshNotifications();
+  }
+
+  markAllNotificationsAsRead() {
+    this.notificationService.markAllAsReadForRecipient(this.currentUser.id);
+    this.refreshNotifications();
+  }
+
+  getSelectedNotification(): Notification | null {
+    const id = this.selectedNotificationId();
+    if (!id) return null;
+    return this.notifications().find((item) => item.id === id) ?? null;
+  }
+
+  getNotificationPriorityLabel(priority: Notification['priority']): string {
+    if (priority === 'high') return 'Wysoki';
+    if (priority === 'medium') return 'Średni';
+    return 'Niski';
+  }
+
+  private shouldOpenNotificationDialog(notification: Notification): boolean {
+    const isCurrentUserRecipient = notification.recipientId === this.currentUser.id;
+    const hasDialogPriority = notification.priority === 'medium' || notification.priority === 'high';
+    return isCurrentUserRecipient && hasDialogPriority;
   }
 }
