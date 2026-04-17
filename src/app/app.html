@@ -1,532 +1,797 @@
-<div class="container" style="padding: 20px; max-width: 900px; margin: auto">
-  <div
-    style="
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-      color: #4a148c;
-    "
-  >
-    <div style="display: flex; align-items: center; gap: 10px">
-      <mat-icon>account_circle</mat-icon>
-      <div style="display: flex; flex-direction: column; gap: 2px">
-        <strong>{{ currentUser.firstName }} {{ currentUser.lastName }}</strong>
-        <span style="font-size: 0.85em; opacity: 0.8">{{ currentUser.role }}</span>
+<div class="container" style="padding: 20px; max-width: 1000px; margin: auto">
+  <h1 class="header-center">ManageMe</h1>
+
+  @if (isLoggedOut()) {
+    <mat-card style="padding: 24px; max-width: 520px; margin: 24px auto">
+      <h2 style="margin-top: 0">Logowanie</h2>
+      <p style="opacity: 0.85; margin-bottom: 6px">
+        Administrator lokalny może zalogować się loginem i hasłem.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px">
+        <mat-form-field appearance="outline">
+          <mat-label>Login administratora</mat-label>
+          <input matInput [(ngModel)]="localAdminLogin" autocomplete="username" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Hasło administratora</mat-label>
+          <input
+            matInput
+            type="password"
+            [(ngModel)]="localAdminPassword"
+            autocomplete="current-password"
+          />
+        </mat-form-field>
+
+        @if (localAuthError()) {
+          <p style="margin: 0; color: #b71c1c; font-weight: 500">{{ localAuthError() }}</p>
+        }
+
+        <div style="display: flex; justify-content: flex-end">
+          <button mat-flat-button color="primary" (click)="signInAsLocalAdmin()">
+            Zaloguj lokalnego admina
+          </button>
+        </div>
       </div>
 
-      <app-notification-badge
-        [count]="unreadNotificationsCount()"
-        (openList)="goToNotifications()"
-      ></app-notification-badge>
-    </div>
+      <hr style="border: 0.5px solid #eee; margin: 20px 0 12px 0" />
 
-    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end">
-      <mat-form-field appearance="outline" style="min-width: 220px">
-        <mat-label>Motyw</mat-label>
-        <mat-select [value]="themeMode()" (selectionChange)="setThemeMode($event.value)">
-          <mat-option value="system">System</mat-option>
-          <mat-option value="light">Jasny</mat-option>
-          <mat-option value="dark">Ciemny</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" style="min-width: 260px">
-        <mat-label>Użytkownik</mat-label>
-        <mat-select [value]="currentUser.id" (selectionChange)="setCurrentUser($event.value)">
-          @for (u of users(); track u.id) {
-            <mat-option [value]="u.id">
-              {{ u.firstName }} {{ u.lastName }} ({{ u.role }})
-            </mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </div>
-  </div>
-
-  <h1 class="header-center">ManageMe 🚀</h1>
-
-  <div class="top-menu">
-    <button mat-button (click)="goToBoard()" [disabled]="activeView() === 'board'">Tablica</button>
-    <button mat-button (click)="goToNotifications()" [disabled]="activeView() === 'notifications'">
-      Powiadomienia
-    </button>
-    <span class="top-menu__unread">Nieprzeczytane: {{ unreadNotificationsCount() }}</span>
-  </div>
-
-  @if (activeView() === 'board') {
-
-  <mat-card style="padding: 20px; margin-bottom: 20px">
-    <mat-card-title style="margin-bottom: 15px; font-size: 1.1em">Nowy Projekt</mat-card-title>
-    <div style="display: flex; flex-direction: column; gap: 10px">
-      <mat-form-field appearance="outline" color="primary">
-        <mat-label>Nazwa projektu</mat-label>
-        <input matInput [(ngModel)]="projectName" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline" color="primary">
-        <mat-label>Opis</mat-label>
-        <textarea matInput [(ngModel)]="projectDesc"></textarea>
-      </mat-form-field>
-
-      <button mat-raised-button color="primary" (click)="addProject()">Dodaj Projekt</button>
-    </div>
-  </mat-card>
-
-  <mat-form-field appearance="fill" style="width: 100%; margin-bottom: 20px">
-    <mat-label>Wybierz projekt do pracy</mat-label>
-    <mat-select (selectionChange)="selectProject($event.value)" [value]="currentProjectId()">
-      @for (p of projects(); track p.id) {
-        <mat-option [value]="p.id">{{ p.name }}</mat-option>
+      <p style="opacity: 0.85; margin-bottom: 0">
+        Alternatywnie zaloguj się kontem GitHub (OAuth). Nowe konto otrzyma rolę
+        <strong>gość</strong> i będzie czekało na zatwierdzenie przez administratora.
+      </p>
+      @if (!isGithubAuthConfigured()) {
+        <p style="margin: 8px 0 0 0; color: #bf360c; font-weight: 500">
+          Brak konfiguracji Firebase/GitHub OAuth.
+        </p>
       }
-    </mat-select>
-  </mat-form-field>
 
-  <hr style="border: 0.5px solid #eee; margin-bottom: 20px" />
+      @if (oauthAuthError()) {
+        <p style="margin: 8px 0 0 0; color: #b71c1c; font-weight: 500">{{ oauthAuthError() }}</p>
+      }
 
-  @if (currentProjectId()) {
-    <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
-      <mat-card-header>
-        <mat-card-title>
-          Dodaj nową funkcjonalność do: {{ getActiveProjectName() }}
-        </mat-card-title>
-      </mat-card-header>
+      <div style="display: flex; justify-content: flex-end; margin-top: 12px">
+        <button
+          mat-stroked-button
+          color="primary"
+          (click)="signInWithGithub()"
+          [disabled]="!isGithubAuthConfigured()"
+        >
+          Zaloguj przez GitHub
+        </button>
+      </div>
+    </mat-card>
+  }
 
-      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px">
-        <mat-form-field appearance="outline">
-          <mat-label>Nazwa historyjki</mat-label>
-          <input matInput [(ngModel)]="storyName" />
-        </mat-form-field>
+  @if (isBlocked() && currentUser(); as user) {
+    <mat-card
+      style="padding: 24px; max-width: 620px; margin: 24px auto; border-left: 5px solid #b71c1c"
+    >
+      <h2 style="margin-top: 0">Konto zablokowane</h2>
+      <p style="margin-bottom: 0">
+        Konto <strong>{{ user.email }}</strong> jest zablokowane i nie ma dostępu do aplikacji.
+      </p>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Opis zadań</mat-label>
-          <textarea matInput [(ngModel)]="storyDesc"></textarea>
-        </mat-form-field>
+      <div style="display: flex; justify-content: flex-end; margin-top: 16px">
+        <button mat-button (click)="signOut()">Wyloguj</button>
+      </div>
+    </mat-card>
+  }
 
-        <mat-form-field appearance="outline">
-          <mat-label>Priorytet</mat-label>
-          <mat-select [(ngModel)]="storyPriority">
-            <mat-option value="niski">Niski</mat-option>
-            <mat-option value="średni">Średni</mat-option>
-            <mat-option value="wysoki">Wysoki</mat-option>
+  @if (isGuestPending() && currentUser(); as user) {
+    <mat-card
+      style="padding: 24px; max-width: 620px; margin: 24px auto; border-left: 5px solid #f57c00"
+    >
+      <h2 style="margin-top: 0">Oczekiwanie na zatwierdzenie konta</h2>
+      <p style="margin-bottom: 0">
+        Zalogowano jako <strong>{{ user.firstName }} {{ user.lastName }}</strong> ({{
+          user.email
+        }}). Konto ma rolę <strong>gość</strong>. Administrator musi nadać rolę z dostępem do
+        aplikacji.
+      </p>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 16px">
+        <button mat-button (click)="signOut()">Wyloguj</button>
+      </div>
+    </mat-card>
+  }
+
+  @if (hasAppAccess() && currentUser(); as user) {
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+        color: #4a148c;
+      "
+    >
+      <div style="display: flex; align-items: center; gap: 10px">
+        <mat-icon>account_circle</mat-icon>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <strong>{{ user.firstName }} {{ user.lastName }}</strong>
+          <span style="font-size: 0.85em; opacity: 0.8"
+            >{{ getRoleLabel(user.role) }} | {{ user.email }}</span
+          >
+        </div>
+
+        <app-notification-badge
+          [count]="unreadNotificationsCount()"
+          (openList)="goToNotifications()"
+        ></app-notification-badge>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          gap: 10px;
+          align-items: center;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        "
+      >
+        <mat-form-field appearance="outline" style="min-width: 220px">
+          <mat-label>Motyw</mat-label>
+          <mat-select [value]="themeMode()" (selectionChange)="setThemeMode($event.value)">
+            <mat-option value="system">System</mat-option>
+            <mat-option value="light">Jasny</mat-option>
+            <mat-option value="dark">Ciemny</mat-option>
           </mat-select>
         </mat-form-field>
 
-        <button mat-raised-button color="primary" (click)="addStory()">Zapisz historyjkę</button>
-      </div>
-    </mat-card>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 10px">
-      <div class="column">
-        <h3 class="header-center">DO ZROBIENIA</h3>
-        @for (s of getStoriesByState('todo'); track s.id) {
-          <mat-card
-            class="story-card"
-            style="margin-bottom: 10px; cursor: pointer"
-            (click)="selectStory(s.id)"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-                padding: 10px 10px 0 16px;
-              "
-            >
-              <div>
-                <mat-card-subtitle style="margin: 0">{{ s.priority | uppercase }}</mat-card-subtitle>
-                <mat-card-title style="font-size: 1.1rem; margin: 0">{{ s.name }}</mat-card-title>
-              </div>
-              <button
-                mat-icon-button
-                color="warn"
-                (click)="$event.stopPropagation(); removeStory(s.id)"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-            <mat-card-content><p>{{ s.description }}</p></mat-card-content>
-          </mat-card>
-        }
-      </div>
-
-      <div class="column">
-        <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
-        @for (s of getStoriesByState('doing'); track s.id) {
-          <mat-card
-            class="story-card"
-            style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
-            (click)="selectStory(s.id)"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px 10px 0 16px;
-              "
-            >
-              <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
-              <button
-                mat-icon-button
-                color="warn"
-                (click)="$event.stopPropagation(); removeStory(s.id)"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-            <mat-card-content><p style="margin: 0">{{ s.description }}</p></mat-card-content>
-          </mat-card>
-        }
-      </div>
-
-      <div class="column">
-        <h3 class="header-center" style="color: green">ZAMKNIĘTE</h3>
-        @for (s of getStoriesByState('done'); track s.id) {
-          <mat-card
-            class="story-card"
-            style="opacity: 0.6; margin-bottom: 10px; cursor: pointer"
-            (click)="selectStory(s.id)"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px 10px 0 16px;
-              "
-            >
-              <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
-              <button
-                mat-icon-button
-                color="warn"
-                (click)="$event.stopPropagation(); removeStory(s.id)"
-              >
-                <mat-icon>delete</mat-icon>
-              </button>
-            </div>
-            <mat-card-content style="text-align: center; padding-bottom: 10px">
-              <mat-icon style="color: green">check_circle</mat-icon>
-            </mat-card-content>
-          </mat-card>
-        }
+        <button mat-button (click)="signOut()">Wyloguj</button>
       </div>
     </div>
 
-    @if (currentStoryId()) {
-      <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
-        <mat-card-header>
-          <mat-card-title>Zadania dla: {{ getActiveStoryName() }}</mat-card-title>
-        </mat-card-header>
+    <div class="top-menu">
+      <button mat-button (click)="goToBoard()" [disabled]="activeView() === 'board'">
+        Tablica
+      </button>
+      <button
+        mat-button
+        (click)="goToNotifications()"
+        [disabled]="activeView() === 'notifications'"
+      >
+        Powiadomienia
+      </button>
+      @if (isAdmin()) {
+        <button mat-button (click)="goToUsers()" [disabled]="activeView() === 'users'">
+          Użytkownicy
+        </button>
+      }
+      <span class="top-menu__unread">Nieprzeczytane: {{ unreadNotificationsCount() }}</span>
+    </div>
 
-        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px">
-          <div style="display: flex; flex-direction: column; gap: 10px">
-            <h3 class="header-center" style="margin: 0">Dodaj zadanie</h3>
+    @if (activeView() === 'board') {
+      <mat-card style="padding: 20px; margin-bottom: 20px">
+        <mat-card-title style="margin-bottom: 15px; font-size: 1.1em">Nowy Projekt</mat-card-title>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <mat-form-field appearance="outline" color="primary">
+            <mat-label>Nazwa projektu</mat-label>
+            <input matInput [(ngModel)]="projectName" />
+          </mat-form-field>
 
+          <mat-form-field appearance="outline" color="primary">
+            <mat-label>Opis</mat-label>
+            <textarea matInput [(ngModel)]="projectDesc"></textarea>
+          </mat-form-field>
+
+          <button mat-raised-button color="primary" (click)="addProject()">Dodaj Projekt</button>
+        </div>
+      </mat-card>
+
+      <mat-form-field appearance="fill" style="width: 100%; margin-bottom: 20px">
+        <mat-label>Wybierz projekt do pracy</mat-label>
+        <mat-select (selectionChange)="selectProject($event.value)" [value]="currentProjectId()">
+          @for (p of projects(); track p.id) {
+            <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <hr style="border: 0.5px solid #eee; margin-bottom: 20px" />
+
+      @if (currentProjectId()) {
+        <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
+          <mat-card-header>
+            <mat-card-title
+              >Dodaj nową funkcjonalność do: {{ getActiveProjectName() }}</mat-card-title
+            >
+          </mat-card-header>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px">
             <mat-form-field appearance="outline">
-              <mat-label>Nazwa zadania</mat-label>
-              <input matInput [(ngModel)]="taskName" />
+              <mat-label>Nazwa historyjki</mat-label>
+              <input matInput [(ngModel)]="storyName" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Opis zadania</mat-label>
-              <textarea matInput [(ngModel)]="taskDesc"></textarea>
+              <mat-label>Opis zadań</mat-label>
+              <textarea matInput [(ngModel)]="storyDesc"></textarea>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Priorytet</mat-label>
-              <mat-select [(ngModel)]="taskPriority">
+              <mat-select [(ngModel)]="storyPriority">
                 <mat-option value="niski">Niski</mat-option>
                 <mat-option value="średni">Średni</mat-option>
                 <mat-option value="wysoki">Wysoki</mat-option>
               </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Przewidywany czas (godz.)</mat-label>
-              <input matInput type="number" [(ngModel)]="taskExpectedHours" min="0.1" step="0.1" />
-            </mat-form-field>
-
-            @if (isAdmin()) {
-              <p style="margin: 0; opacity: 0.8">
-                Admin nie realizuje zadań. Start i zakończenie zadań wykonują role `devops` i `developer`.
-              </p>
-            }
-
-            <button mat-raised-button color="primary" (click)="addTask()" [disabled]="isAdmin()">
-              Dodaj zadanie
+            <button mat-raised-button color="primary" (click)="addStory()">
+              Zapisz historyjkę
             </button>
           </div>
+        </mat-card>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px">
-            <div class="column">
-              <h3 class="header-center">TODO</h3>
-
-              @for (t of getTasksByState('todo'); track t.id) {
-                <mat-card
-                  class="story-card"
-                  style="margin-bottom: 10px; cursor: pointer"
-                  (click)="selectTask(t.id)"
+        <div
+          class="board-grid"
+          style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 10px"
+        >
+          <div class="column">
+            <h3 class="header-center">DO ZROBIENIA</h3>
+            @for (s of getStoriesByState('todo'); track s.id) {
+              <mat-card
+                class="story-card"
+                style="margin-bottom: 10px; cursor: pointer"
+                (click)="selectStory(s.id)"
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    padding: 10px 10px 0 16px;
+                  "
                 >
-                  <div
-                    style="
-                      display: flex;
-                      justify-content: space-between;
-                      align-items: flex-start;
-                      padding: 10px 10px 0 16px;
-                    "
-                  >
-                    <div>
-                      <mat-card-subtitle style="margin: 0">{{ t.priority | uppercase }}</mat-card-subtitle>
-                      <mat-card-title style="font-size: 1.1rem; margin: 0">{{ t.name }}</mat-card-title>
-                    </div>
-                    <button
-                      mat-icon-button
-                      color="warn"
-                      (click)="$event.stopPropagation(); removeTask(t.id)"
-                      [disabled]="isAdmin()"
-                    >
-                      <mat-icon>delete</mat-icon>
-                    </button>
+                  <div>
+                    <mat-card-subtitle style="margin: 0">{{
+                      s.priority | uppercase
+                    }}</mat-card-subtitle>
+                    <mat-card-title style="font-size: 1.1rem; margin: 0">{{
+                      s.name
+                    }}</mat-card-title>
                   </div>
-
-                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
-
-                  <mat-card-content style="padding-top: 0">
-                    <p style="margin: 0">Przewidywane: {{ t.expectedHours }} h</p>
-                    <p style="margin: 6px 0 0 0; opacity: 0.8">
-                      Dodano: {{ formatDate(t.addedAt) }}
-                    </p>
-                  </mat-card-content>
-
-                  @if (!isAdmin()) {
-                    <mat-card-actions>
-                      <button mat-button color="primary" (click)="$event.stopPropagation(); startTask(t.id)">
-                        ROZPOCZNIJ
-                      </button>
-                    </mat-card-actions>
-                  }
-                </mat-card>
-              }
-            </div>
-
-            <div class="column">
-              <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
-
-              @for (t of getTasksByState('doing'); track t.id) {
-                <mat-card
-                  class="story-card"
-                  style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
-                  (click)="selectTask(t.id)"
+                  <button
+                    mat-icon-button
+                    color="warn"
+                    (click)="$event.stopPropagation(); removeStory(s.id)"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <mat-card-content
+                  ><p>{{ s.description }}</p></mat-card-content
                 >
-                  <div
-                    style="
-                      display: flex;
-                      justify-content: space-between;
-                      align-items: center;
-                      padding: 10px 10px 0 16px;
-                    "
-                  >
-                    <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
-                    <button
-                      mat-icon-button
-                      color="warn"
-                      (click)="$event.stopPropagation(); removeTask(t.id)"
-                      [disabled]="isAdmin()"
-                    >
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-
-                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
-
-                  <mat-card-content style="padding-top: 0">
-                    <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
-                    <p style="margin: 6px 0 0 0; opacity: 0.8">Start: {{ formatDate(t.startAt) }}</p>
-                  </mat-card-content>
-
-                  @if (!isAdmin()) {
-                    <mat-card-actions>
-                      <button mat-button (click)="$event.stopPropagation(); completeTask(t.id)">
-                        ZAKOŃCZ
-                      </button>
-                    </mat-card-actions>
-                  }
-                </mat-card>
-              }
-            </div>
-
-            <div class="column">
-              <h3 class="header-center" style="color: green">DONE</h3>
-
-              @for (t of getTasksByState('done'); track t.id) {
-                <mat-card
-                  class="story-card"
-                  style="opacity: 0.7; margin-bottom: 10px; cursor: pointer"
-                  (click)="selectTask(t.id)"
-                >
-                  <div
-                    style="
-                      display: flex;
-                      justify-content: space-between;
-                      align-items: center;
-                      padding: 10px 10px 0 16px;
-                    "
-                  >
-                    <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
-                    <button
-                      mat-icon-button
-                      color="warn"
-                      (click)="$event.stopPropagation(); removeTask(t.id)"
-                      [disabled]="isAdmin()"
-                    >
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </div>
-
-                  <mat-card-content><p style="margin: 0">{{ t.description }}</p></mat-card-content>
-
-                  <mat-card-content style="padding-top: 0">
-                    <div style="text-align: center; padding-bottom: 8px">
-                      <mat-icon style="color: green">check_circle</mat-icon>
-                    </div>
-                    <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
-                    <p style="margin: 6px 0 0 0; opacity: 0.85">Koniec: {{ formatDate(t.endAt) }}</p>
-                    <p style="margin: 6px 0 0 0; font-weight: 600">
-                      Zrealizowane: {{ formatHours(t.actualHours) }}
-                    </p>
-                  </mat-card-content>
-                </mat-card>
-              }
-            </div>
+              </mat-card>
+            }
           </div>
 
-          @if (selectedTaskId()) {
-            <mat-card style="margin-top: 10px; padding: 15px; background: rgba(0, 0, 0, 0.02)">
-              <h3 style="margin: 0 0 10px 0">Szczegóły zadania</h3>
+          <div class="column">
+            <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
+            @for (s of getStoriesByState('doing'); track s.id) {
+              <mat-card
+                class="story-card"
+                style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
+                (click)="selectStory(s.id)"
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 10px 10px 0 16px;
+                  "
+                >
+                  <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
+                  <button
+                    mat-icon-button
+                    color="warn"
+                    (click)="$event.stopPropagation(); removeStory(s.id)"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <mat-card-content
+                  ><p style="margin: 0">{{ s.description }}</p></mat-card-content
+                >
+              </mat-card>
+            }
+          </div>
 
-              <div style="display: flex; flex-direction: column; gap: 8px">
-                @for (line of [
-                  { k: 'Nazwa', v: getSelectedTask()?.name ?? '-' },
-                  { k: 'Opis', v: getSelectedTask()?.description ?? '-' },
-                  { k: 'Priorytet', v: (getSelectedTask()?.priority ?? '-') },
-                  { k: 'Przewidywane', v: formatHours(getSelectedTask()?.expectedHours ?? null) },
-                  { k: 'Stan', v: getSelectedTask()?.state ?? '-' },
-                  { k: 'Historyjka', v: getActiveStoryName() ?? '-' },
-                  { k: 'Dodano', v: formatDate(getSelectedTask()?.addedAt ?? null) },
-                  { k: 'Start', v: formatDate(getSelectedTask()?.startAt ?? null) },
-                  { k: 'Koniec', v: formatDate(getSelectedTask()?.endAt ?? null) },
-                  { k: 'Zrealizowane roboczogodziny', v: formatHours(getSelectedTask()?.actualHours ?? null) },
-                  { k: 'Osoba odpowiedzialna', v: getUserName(getSelectedTask()?.responsibleUserId ?? null) },
-                ]; track line.k) {
-                  <div style="display: flex; gap: 10px">
-                    <strong style="min-width: 260px">{{ line.k }}:</strong>
-                    <span>{{ line.v }}</span>
-                  </div>
+          <div class="column">
+            <h3 class="header-center" style="color: green">ZAMKNIĘTE</h3>
+            @for (s of getStoriesByState('done'); track s.id) {
+              <mat-card
+                class="story-card"
+                style="opacity: 0.6; margin-bottom: 10px; cursor: pointer"
+                (click)="selectStory(s.id)"
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 10px 10px 0 16px;
+                  "
+                >
+                  <mat-card-title style="margin: 0">{{ s.name }}</mat-card-title>
+                  <button
+                    mat-icon-button
+                    color="warn"
+                    (click)="$event.stopPropagation(); removeStory(s.id)"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </div>
+                <mat-card-content style="text-align: center; padding-bottom: 10px">
+                  <mat-icon style="color: green">check_circle</mat-icon>
+                </mat-card-content>
+              </mat-card>
+            }
+          </div>
+        </div>
+
+        @if (currentStoryId()) {
+          <mat-card style="padding: 20px; margin: 20px 0; border-left: 5px solid #9c27b0">
+            <mat-card-header>
+              <mat-card-title>Zadania dla: {{ getActiveStoryName() }}</mat-card-title>
+            </mat-card-header>
+
+            <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px">
+              <div style="display: flex; flex-direction: column; gap: 10px">
+                <h3 class="header-center" style="margin: 0">Dodaj zadanie</h3>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Nazwa zadania</mat-label>
+                  <input matInput [(ngModel)]="taskName" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Opis zadania</mat-label>
+                  <textarea matInput [(ngModel)]="taskDesc"></textarea>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Priorytet</mat-label>
+                  <mat-select [(ngModel)]="taskPriority">
+                    <mat-option value="niski">Niski</mat-option>
+                    <mat-option value="średni">Średni</mat-option>
+                    <mat-option value="wysoki">Wysoki</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Przewidywany czas (godz.)</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    [(ngModel)]="taskExpectedHours"
+                    min="0.1"
+                    step="0.1"
+                  />
+                </mat-form-field>
+
+                @if (isAdmin()) {
+                  <p style="margin: 0; opacity: 0.8">
+                    Admin nie realizuje zadań. Start i zakończenie zadań wykonują role `devops` i
+                    `developer`.
+                  </p>
                 }
+
+                <button
+                  mat-raised-button
+                  color="primary"
+                  (click)="addTask()"
+                  [disabled]="!canManageTasks()"
+                >
+                  Dodaj zadanie
+                </button>
               </div>
 
-              <div style="margin-top: 15px">
-                <button mat-button (click)="clearSelectedTask()">Zamknij</button>
+              <div
+                class="board-grid"
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px"
+              >
+                <div class="column">
+                  <h3 class="header-center">TODO</h3>
+
+                  @for (t of getTasksByState('todo'); track t.id) {
+                    <mat-card
+                      class="story-card"
+                      style="margin-bottom: 10px; cursor: pointer"
+                      (click)="selectTask(t.id)"
+                    >
+                      <div
+                        style="
+                          display: flex;
+                          justify-content: space-between;
+                          align-items: flex-start;
+                          padding: 10px 10px 0 16px;
+                        "
+                      >
+                        <div>
+                          <mat-card-subtitle style="margin: 0">{{
+                            t.priority | uppercase
+                          }}</mat-card-subtitle>
+                          <mat-card-title style="font-size: 1.1rem; margin: 0">{{
+                            t.name
+                          }}</mat-card-title>
+                        </div>
+                        <button
+                          mat-icon-button
+                          color="warn"
+                          (click)="$event.stopPropagation(); removeTask(t.id)"
+                          [disabled]="!canManageTasks()"
+                        >
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </div>
+
+                      <mat-card-content
+                        ><p style="margin: 0">{{ t.description }}</p></mat-card-content
+                      >
+
+                      <mat-card-content style="padding-top: 0">
+                        <p style="margin: 0">Przewidywane: {{ t.expectedHours }} h</p>
+                        <p style="margin: 6px 0 0 0; opacity: 0.8">
+                          Dodano: {{ formatDate(t.addedAt) }}
+                        </p>
+                      </mat-card-content>
+
+                      @if (canManageTasks()) {
+                        <mat-card-actions>
+                          <button
+                            mat-button
+                            color="primary"
+                            (click)="$event.stopPropagation(); startTask(t.id)"
+                          >
+                            ROZPOCZNIJ
+                          </button>
+                        </mat-card-actions>
+                      }
+                    </mat-card>
+                  }
+                </div>
+
+                <div class="column">
+                  <h3 class="header-center" style="color: #9c27b0">W TRAKCIE</h3>
+
+                  @for (t of getTasksByState('doing'); track t.id) {
+                    <mat-card
+                      class="story-card"
+                      style="border-top: 3px solid #9c27b0; margin-bottom: 10px; cursor: pointer"
+                      (click)="selectTask(t.id)"
+                    >
+                      <div
+                        style="
+                          display: flex;
+                          justify-content: space-between;
+                          align-items: center;
+                          padding: 10px 10px 0 16px;
+                        "
+                      >
+                        <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
+                        <button
+                          mat-icon-button
+                          color="warn"
+                          (click)="$event.stopPropagation(); removeTask(t.id)"
+                          [disabled]="!canManageTasks()"
+                        >
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </div>
+
+                      <mat-card-content
+                        ><p style="margin: 0">{{ t.description }}</p></mat-card-content
+                      >
+
+                      <mat-card-content style="padding-top: 0">
+                        <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
+                        <p style="margin: 6px 0 0 0; opacity: 0.8">
+                          Start: {{ formatDate(t.startAt) }}
+                        </p>
+                      </mat-card-content>
+
+                      @if (canManageTasks()) {
+                        <mat-card-actions>
+                          <button mat-button (click)="$event.stopPropagation(); completeTask(t.id)">
+                            ZAKOŃCZ
+                          </button>
+                        </mat-card-actions>
+                      }
+                    </mat-card>
+                  }
+                </div>
+
+                <div class="column">
+                  <h3 class="header-center" style="color: green">DONE</h3>
+
+                  @for (t of getTasksByState('done'); track t.id) {
+                    <mat-card
+                      class="story-card"
+                      style="opacity: 0.7; margin-bottom: 10px; cursor: pointer"
+                      (click)="selectTask(t.id)"
+                    >
+                      <div
+                        style="
+                          display: flex;
+                          justify-content: space-between;
+                          align-items: center;
+                          padding: 10px 10px 0 16px;
+                        "
+                      >
+                        <mat-card-title style="margin: 0">{{ t.name }}</mat-card-title>
+                        <button
+                          mat-icon-button
+                          color="warn"
+                          (click)="$event.stopPropagation(); removeTask(t.id)"
+                          [disabled]="!canManageTasks()"
+                        >
+                          <mat-icon>delete</mat-icon>
+                        </button>
+                      </div>
+
+                      <mat-card-content
+                        ><p style="margin: 0">{{ t.description }}</p></mat-card-content
+                      >
+
+                      <mat-card-content style="padding-top: 0">
+                        <div style="text-align: center; padding-bottom: 8px">
+                          <mat-icon style="color: green">check_circle</mat-icon>
+                        </div>
+                        <p style="margin: 0">Odp.: {{ getUserName(t.responsibleUserId) }}</p>
+                        <p style="margin: 6px 0 0 0; opacity: 0.85">
+                          Koniec: {{ formatDate(t.endAt) }}
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-weight: 600">
+                          Zrealizowane: {{ formatHours(t.actualHours) }}
+                        </p>
+                      </mat-card-content>
+                    </mat-card>
+                  }
+                </div>
+              </div>
+
+              @if (selectedTaskId()) {
+                <mat-card style="margin-top: 10px; padding: 15px; background: rgba(0, 0, 0, 0.02)">
+                  <h3 style="margin: 0 0 10px 0">Szczegóły zadania</h3>
+
+                  <div style="display: flex; flex-direction: column; gap: 8px">
+                    @for (
+                      line of [
+                        { k: 'Nazwa', v: getSelectedTask()?.name ?? '-' },
+                        { k: 'Opis', v: getSelectedTask()?.description ?? '-' },
+                        { k: 'Priorytet', v: getSelectedTask()?.priority ?? '-' },
+                        {
+                          k: 'Przewidywane',
+                          v: formatHours(getSelectedTask()?.expectedHours ?? null),
+                        },
+                        { k: 'Stan', v: getSelectedTask()?.state ?? '-' },
+                        { k: 'Historyjka', v: getActiveStoryName() ?? '-' },
+                        { k: 'Dodano', v: formatDate(getSelectedTask()?.addedAt ?? null) },
+                        { k: 'Start', v: formatDate(getSelectedTask()?.startAt ?? null) },
+                        { k: 'Koniec', v: formatDate(getSelectedTask()?.endAt ?? null) },
+                        {
+                          k: 'Zrealizowane roboczogodziny',
+                          v: formatHours(getSelectedTask()?.actualHours ?? null),
+                        },
+                        {
+                          k: 'Osoba odpowiedzialna',
+                          v: getUserName(getSelectedTask()?.responsibleUserId ?? null),
+                        },
+                      ];
+                      track line.k
+                    ) {
+                      <div style="display: flex; gap: 10px">
+                        <strong style="min-width: 260px">{{ line.k }}:</strong>
+                        <span>{{ line.v }}</span>
+                      </div>
+                    }
+                  </div>
+
+                  <div style="margin-top: 15px">
+                    <button mat-button (click)="clearSelectedTask()">Zamknij</button>
+                  </div>
+                </mat-card>
+              }
+            </div>
+          </mat-card>
+        }
+      }
+
+      <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        @for (item of projects(); track item.id) {
+          <mat-card
+            style="
+              padding: 15px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+            "
+          >
+            <div>
+              <strong style="font-size: 1.2em; color: #4a148c">{{ item.name }}</strong>
+              <p style="margin: 5px 0 0 0; color: #666">{{ item.description }}</p>
+            </div>
+            <button mat-icon-button color="warn" (click)="deleteProject(item.id)">
+              <mat-icon>delete_sweep</mat-icon>
+            </button>
+          </mat-card>
+        }
+      </div>
+    }
+
+    @if (activeView() === 'notifications') {
+      <mat-card style="padding: 20px; margin-top: 20px">
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+          "
+        >
+          <h2 style="margin: 0">Powiadomienia</h2>
+          <button mat-flat-button color="primary" (click)="markAllNotificationsAsRead()">
+            Oznacz wszystkie jako przeczytane
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px">
+          @if (notifications().length === 0) {
+            <p style="margin: 0; opacity: 0.8">Brak powiadomień.</p>
+          }
+
+          @for (item of notifications(); track item.id) {
+            <mat-card class="notification-card" [class.notification-card--read]="item.isRead">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: flex-start;
+                  gap: 12px;
+                "
+              >
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                    <strong>{{ item.title }}</strong>
+                    <span class="notification-priority" [attr.data-priority]="item.priority">
+                      {{ getNotificationPriorityLabel(item.priority) }}
+                    </span>
+                    @if (!item.isRead) {
+                      <span class="notification-unread-dot" aria-label="Nieprzeczytane"></span>
+                    }
+                  </div>
+                  <span style="opacity: 0.85">{{ item.message }}</span>
+                  <small style="opacity: 0.8">{{ formatDate(item.date) }}</small>
+                </div>
+
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end">
+                  <button mat-button (click)="openNotificationDetail(item.id)">Szczegóły</button>
+                  <button
+                    mat-button
+                    (click)="markNotificationAsRead(item.id)"
+                    [disabled]="item.isRead"
+                  >
+                    Oznacz jako przeczytane
+                  </button>
+                </div>
               </div>
             </mat-card>
           }
         </div>
       </mat-card>
     }
-  }
 
-    <h3 style="margin-top: 30px">Wszystkie projekty:</h3>
-    <div style="display: flex; flex-direction: column; gap: 12px">
-      @for (item of projects(); track item.id) {
-        <mat-card
-          style="padding: 15px; display: flex; justify-content: space-between; align-items: center"
-        >
-          <div>
-            <strong style="font-size: 1.2em; color: #4a148c">{{ item.name }}</strong>
-            <p style="margin: 5px 0 0 0; color: #666">{{ item.description }}</p>
+    @if (activeView() === 'notification-detail') {
+      <mat-card style="padding: 20px; margin-top: 20px">
+        @if (getSelectedNotification(); as item) {
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 10px;
+              flex-wrap: wrap;
+            "
+          >
+            <h2 style="margin: 0">{{ item.title }}</h2>
+            <span class="notification-priority" [attr.data-priority]="item.priority">
+              {{ getNotificationPriorityLabel(item.priority) }}
+            </span>
           </div>
-          <button mat-icon-button color="warn" (click)="deleteProject(item.id)">
-            <mat-icon>delete_sweep</mat-icon>
-          </button>
-        </mat-card>
-      }
-    </div>
-  }
 
-  @if (activeView() === 'notifications') {
-    <mat-card style="padding: 20px; margin-top: 20px">
-      <div
-        style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap"
-      >
-        <h2 style="margin: 0">Powiadomienia</h2>
-        <button mat-flat-button color="primary" (click)="markAllNotificationsAsRead()">
-          Oznacz wszystkie jako przeczytane
-        </button>
-      </div>
+          <p style="margin-top: 14px">{{ item.message }}</p>
+          <p style="opacity: 0.8">Data utworzenia: {{ formatDate(item.date) }}</p>
+          <p style="opacity: 0.8">Status: {{ item.isRead ? 'Przeczytane' : 'Nieprzeczytane' }}</p>
 
-      <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 15px">
-        @if (notifications().length === 0) {
-          <p style="margin: 0; opacity: 0.8">Brak powiadomień.</p>
+          <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap">
+            <button mat-button (click)="goToNotifications()">Wróć do listy</button>
+            <button
+              mat-flat-button
+              color="primary"
+              (click)="markNotificationAsRead(item.id)"
+              [disabled]="item.isRead"
+            >
+              Oznacz jako przeczytane
+            </button>
+          </div>
+        } @else {
+          <p style="margin: 0">Nie znaleziono powiadomienia.</p>
+          <div style="margin-top: 12px">
+            <button mat-button (click)="goToNotifications()">Wróć do listy</button>
+          </div>
         }
+      </mat-card>
+    }
 
-        @for (item of notifications(); track item.id) {
-          <mat-card class="notification-card" [class.notification-card--read]="item.isRead">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px">
-              <div style="display: flex; flex-direction: column; gap: 6px">
-                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-                  <strong>{{ item.title }}</strong>
-                  <span class="notification-priority" [attr.data-priority]="item.priority">
-                    {{ getNotificationPriorityLabel(item.priority) }}
-                  </span>
-                  @if (!item.isRead) {
-                    <span class="notification-unread-dot" aria-label="Nieprzeczytane"></span>
-                  }
-                </div>
-                <span style="opacity: 0.85">{{ item.message }}</span>
-                <small style="opacity: 0.8">{{ formatDate(item.date) }}</small>
+    @if (activeView() === 'users' && isAdmin()) {
+      <mat-card style="padding: 20px; margin-top: 20px">
+        <h2 style="margin: 0 0 14px 0">Użytkownicy</h2>
+
+        <div class="users-grid">
+          @for (u of users(); track u.id) {
+            <div
+              class="users-row"
+              style="
+                display: grid;
+                grid-template-columns:
+                  minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, 220px)
+                  auto;
+                gap: 10px;
+                align-items: center;
+                padding: 12px;
+                border: 1px solid rgba(0, 0, 0, 0.12);
+                border-radius: 10px;
+              "
+            >
+              <div>
+                <strong>{{ u.firstName }} {{ u.lastName }}</strong>
+                <div style="opacity: 0.8">{{ u.email }}</div>
               </div>
 
-              <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end">
-                <button mat-button (click)="openNotificationDetail(item.id)">Szczegóły</button>
-                <button mat-button (click)="markNotificationAsRead(item.id)" [disabled]="item.isRead">
-                  Oznacz jako przeczytane
-                </button>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <span style="opacity: 0.85">Utworzono: {{ formatDate(u.createdAt) }}</span>
+                <span style="opacity: 0.85"
+                  >Ostatnie logowanie: {{ formatDate(u.lastLoginAt) }}</span
+                >
+                <span [style.color]="u.isBlocked ? '#b71c1c' : '#1b5e20'">
+                  {{ u.isBlocked ? 'Zablokowany' : 'Aktywny' }}
+                </span>
               </div>
+
+              <mat-form-field appearance="outline" style="margin: 0">
+                <mat-label>Rola</mat-label>
+                <mat-select
+                  [value]="u.role"
+                  (selectionChange)="changeUserRole(u.id, $event.value)"
+                  [disabled]="isSuperAdminUser(u)"
+                >
+                  <mat-option value="admin">Admin</mat-option>
+                  <mat-option value="devops">DevOps</mat-option>
+                  <mat-option value="developer">Developer</mat-option>
+                  <mat-option value="guest">Gość</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <button
+                mat-stroked-button
+                [color]="u.isBlocked ? 'primary' : 'warn'"
+                (click)="toggleUserBlocked(u.id)"
+                [disabled]="isSuperAdminUser(u)"
+              >
+                {{ u.isBlocked ? 'Odblokuj' : 'Zablokuj' }}
+              </button>
             </div>
-          </mat-card>
-        }
-      </div>
-    </mat-card>
-  }
-
-  @if (activeView() === 'notification-detail') {
-    <mat-card style="padding: 20px; margin-top: 20px">
-      @if (getSelectedNotification(); as item) {
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap">
-          <h2 style="margin: 0">{{ item.title }}</h2>
-          <span class="notification-priority" [attr.data-priority]="item.priority">
-            {{ getNotificationPriorityLabel(item.priority) }}
-          </span>
+          }
         </div>
-
-        <p style="margin-top: 14px">{{ item.message }}</p>
-        <p style="opacity: 0.8">Data utworzenia: {{ formatDate(item.date) }}</p>
-        <p style="opacity: 0.8">Status: {{ item.isRead ? 'Przeczytane' : 'Nieprzeczytane' }}</p>
-
-        <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap">
-          <button mat-button (click)="goToNotifications()">Wróć do listy</button>
-          <button mat-flat-button color="primary" (click)="markNotificationAsRead(item.id)" [disabled]="item.isRead">
-            Oznacz jako przeczytane
-          </button>
-        </div>
-      } @else {
-        <p style="margin: 0">Nie znaleziono powiadomienia.</p>
-        <div style="margin-top: 12px">
-          <button mat-button (click)="goToNotifications()">Wróć do listy</button>
-        </div>
-      }
-    </mat-card>
+      </mat-card>
+    }
   }
 </div>

@@ -6,12 +6,16 @@ export interface ProjectModel {
 
 export interface User {
   id: string;
+  email: string;
   firstName: string;
   lastName: string;
   role: UserRole;
+  isBlocked: boolean;
+  createdAt: string;
+  lastLoginAt: string;
 }
 
-export type UserRole = 'admin' | 'devops' | 'developer';
+export type UserRole = 'admin' | 'devops' | 'developer' | 'guest';
 
 export type StoryPriority = 'niski' | 'średni' | 'wysoki';
 export type StoryState = 'todo' | 'doing' | 'done';

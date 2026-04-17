@@ -2,8 +2,5 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 
 export const appConfig: ApplicationConfig = {
-  providers: [
-    provideBrowserGlobalErrorListeners(),
-    provideAnimationsAsync(),
-  ],
+  providers: [provideBrowserGlobalErrorListeners(), provideAnimationsAsync()],
 };

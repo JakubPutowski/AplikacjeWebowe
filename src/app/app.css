@@ -26,6 +26,15 @@ button[mat-icon-button]:hover {
   padding: 10px !important;
 }
 
+.board-grid {
+  align-items: start;
+}
+
+.users-grid {
+  display: grid;
+  gap: 10px;
+}
+
 .top-menu {
   display: flex;
   align-items: center;
@@ -79,6 +88,14 @@ button[mat-icon-button]:hover {
 @media (max-width: 900px) {
   .container {
     margin-top: 16px !important;
+  }
+
+  .board-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .users-row {
+    grid-template-columns: 1fr !important;
   }
 }
 

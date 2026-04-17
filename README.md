@@ -14,10 +14,21 @@ Once the server is running, open your browser and navigate to `http://localhost:
 
 ## Authentication configuration
 
-Google OAuth and super admin account are configured in `src/app/auth.config.ts`:
+GitHub OAuth (through Firebase Auth) and admin accounts are configured in `src/app/auth.config.ts`:
 
+- `FIREBASE_CONFIG` - Firebase web configuration used by GitHub OAuth sign-in.
 - `SUPER_ADMIN_EMAIL` - user logged with this e-mail is always `admin`.
-- `GOOGLE_OAUTH_CLIENT_ID` - OAuth client id used by Google sign-in.
+- `LOCAL_ADMIN_LOGIN` / `LOCAL_ADMIN_PASSWORD` - local admin credentials (login + password).
+- `LOCAL_ADMIN_EMAIL` - local admin internal account e-mail.
+
+To configure GitHub OAuth:
+
+1. Create a Firebase project and enable Authentication -> Sign-in method -> GitHub.
+2. Create a GitHub OAuth app and copy `Client ID` and `Client Secret` into Firebase GitHub provider settings.
+3. Use callback URL from Firebase: `https://<your-project-id>.firebaseapp.com/__/auth/handler`.
+4. Fill `FIREBASE_CONFIG` placeholders in `src/app/auth.config.ts`.
+
+Note: local admin authentication is client-side only and should be treated as a development/demo feature.
 
 ## Code scaffolding
 

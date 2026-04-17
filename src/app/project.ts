@@ -1,54 +1,38 @@
 import { inject, Injectable } from '@angular/core';
-import { ProjectModel, Story, StoryState, User } from './project.model';
+import { ProjectModel, Story, StoryState, User, UserRole } from './project.model';
 import { Task } from './task.model';
 import { NotificationPriority } from './notification.model';
 import { NotificationService } from './notification.service';
+import {
+  LOCAL_ADMIN_EMAIL,
+  LOCAL_ADMIN_LOGIN,
+  LOCAL_ADMIN_PASSWORD,
+  SUPER_ADMIN_EMAIL,
+} from './auth.config';
+
+type OAuthProfile = {
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+};
+
+type LocalAdminCredentials = {
+  login: string;
+  password: string;
+};
 
 @Injectable({ providedIn: 'root' })
 export class ProjectService {
   private notificationService = inject(NotificationService);
 
-  private LS_KEY = 'projects_data';
-  private STORIES_KEY = 'stories_data';
-  private CURRENT_PROJ_KEY = 'current_project_id';
+  private readonly LS_KEY = 'projects_data';
+  private readonly STORIES_KEY = 'stories_data';
+  private readonly CURRENT_PROJ_KEY = 'current_project_id';
 
-  private TASKS_KEY = 'tasks_data';
-  private USERS_KEY = 'users_data';
-  private CURRENT_USER_KEY = 'current_user_id';
-
-  private ensureUsersSeeded(): void {
-    const existingUsersRaw = localStorage.getItem(this.USERS_KEY);
-
-    // Seed users only once.
-    if (!existingUsersRaw) {
-      const initialUsers: User[] = [
-        { id: 'u_admin', firstName: 'Admin', lastName: 'Systemu', role: 'admin' },
-        { id: 'u_devops', firstName: 'Devops', lastName: 'User', role: 'devops' },
-        { id: 'u_developer', firstName: 'Developer', lastName: 'User', role: 'developer' },
-      ];
-
-      localStorage.setItem(this.USERS_KEY, JSON.stringify(initialUsers));
-      // Standardowo admin na pierwszym uruchomieniu.
-      localStorage.setItem(this.CURRENT_USER_KEY, 'u_admin');
-      return;
-    }
-
-    // After seeding: keep current user stable, only fallback to admin when missing/invalid.
-    const currentId = localStorage.getItem(this.CURRENT_USER_KEY);
-    if (!currentId) {
-      localStorage.setItem(this.CURRENT_USER_KEY, 'u_admin');
-      return;
-    }
-
-    try {
-      const users = JSON.parse(existingUsersRaw) as User[];
-      if (!users.some((u) => u.id === currentId)) {
-        localStorage.setItem(this.CURRENT_USER_KEY, 'u_admin');
-      }
-    } catch {
-      localStorage.setItem(this.CURRENT_USER_KEY, 'u_admin');
-    }
-  }
+  private readonly TASKS_KEY = 'tasks_data';
+  private readonly USERS_KEY = 'users_data';
+  private readonly CURRENT_USER_KEY = 'current_user_id';
 
   private getFromStorage<T>(key: string, fallback: T): T {
     const data = localStorage.getItem(key);
@@ -108,22 +92,149 @@ export class ProjectService {
 
   // Users / auth (lokalnie)
   getUsers(): User[] {
-    this.ensureUsersSeeded();
-    return this.getFromStorage<User[]>(this.USERS_KEY, []);
+    const rawUsers = this.getFromStorage<unknown[]>(this.USERS_KEY, []);
+    const normalizedUsers = rawUsers
+      .map((item) => this.normalizeUser(item))
+      .filter((item): item is User => item !== null);
+
+    this.setToStorage(this.USERS_KEY, normalizedUsers);
+    return normalizedUsers;
   }
 
-  getCurrentUser(): User {
-    this.ensureUsersSeeded();
+  getCurrentUser(): User | null {
     const users = this.getUsers();
     const currentId = localStorage.getItem(this.CURRENT_USER_KEY);
-    return users.find((u) => u.id === currentId) ?? users[0];
+    if (!currentId) return null;
+    return users.find((u) => u.id === currentId) ?? null;
   }
 
-  setCurrentUserId(id: string): void {
-    this.ensureUsersSeeded();
+  clearCurrentUser(): void {
+    localStorage.removeItem(this.CURRENT_USER_KEY);
+  }
+
+  loginWithOAuth(profile: OAuthProfile): { user: User; isNew: boolean } {
+    const normalizedEmail = profile.email.trim().toLowerCase();
     const users = this.getUsers();
-    if (!users.some((u) => u.id === id)) return;
-    localStorage.setItem(this.CURRENT_USER_KEY, id);
+    const now = new Date().toISOString();
+
+    const name = this.resolveNames(profile);
+    const existingIdx = users.findIndex((user) => user.email.toLowerCase() === normalizedEmail);
+
+    if (existingIdx !== -1) {
+      const current = users[existingIdx];
+      const updated: User = {
+        ...current,
+        firstName: name.firstName,
+        lastName: name.lastName,
+        role: this.isSuperAdminEmail(normalizedEmail) ? 'admin' : current.role,
+        lastLoginAt: now,
+      };
+
+      users[existingIdx] = updated;
+      this.setToStorage(this.USERS_KEY, users);
+      localStorage.setItem(this.CURRENT_USER_KEY, updated.id);
+
+      return { user: updated, isNew: false };
+    }
+
+    const created: User = {
+      id: crypto.randomUUID(),
+      email: normalizedEmail,
+      firstName: name.firstName,
+      lastName: name.lastName,
+      role: this.isSuperAdminEmail(normalizedEmail) ? 'admin' : 'guest',
+      isBlocked: false,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+
+    const next = [...users, created];
+    this.setToStorage(this.USERS_KEY, next);
+    localStorage.setItem(this.CURRENT_USER_KEY, created.id);
+
+    this.notifyNewUserCreated(created);
+
+    return { user: created, isNew: true };
+  }
+
+  loginWithLocalAdmin(credentials: LocalAdminCredentials): { user: User; isNew: boolean } | null {
+    const normalizedLogin = credentials.login.trim();
+    if (normalizedLogin !== LOCAL_ADMIN_LOGIN || credentials.password !== LOCAL_ADMIN_PASSWORD) {
+      return null;
+    }
+
+    const users = this.getUsers();
+    const now = new Date().toISOString();
+    const localAdminEmail = LOCAL_ADMIN_EMAIL.trim().toLowerCase();
+    const existingIdx = users.findIndex((user) => user.email.toLowerCase() === localAdminEmail);
+
+    if (existingIdx !== -1) {
+      const current = users[existingIdx];
+      const updated: User = {
+        ...current,
+        email: localAdminEmail,
+        firstName: 'Local',
+        lastName: 'Admin',
+        role: 'admin',
+        isBlocked: false,
+        lastLoginAt: now,
+      };
+
+      users[existingIdx] = updated;
+      this.setToStorage(this.USERS_KEY, users);
+      localStorage.setItem(this.CURRENT_USER_KEY, updated.id);
+      return { user: updated, isNew: false };
+    }
+
+    const created: User = {
+      id: crypto.randomUUID(),
+      email: localAdminEmail,
+      firstName: 'Local',
+      lastName: 'Admin',
+      role: 'admin',
+      isBlocked: false,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+
+    const next = [...users, created];
+    this.setToStorage(this.USERS_KEY, next);
+    localStorage.setItem(this.CURRENT_USER_KEY, created.id);
+
+    this.notifyNewUserCreated(created);
+
+    return { user: created, isNew: true };
+  }
+
+  updateUserRole(userId: string, role: UserRole): void {
+    const users = this.getUsers();
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx === -1) return;
+
+    if (this.isProtectedAdminEmail(users[idx].email)) {
+      users[idx] = { ...users[idx], role: 'admin' };
+    } else {
+      users[idx] = { ...users[idx], role };
+    }
+
+    this.setToStorage(this.USERS_KEY, users);
+  }
+
+  setUserBlocked(userId: string, isBlocked: boolean): void {
+    const users = this.getUsers();
+    const idx = users.findIndex((u) => u.id === userId);
+    if (idx === -1) return;
+
+    if (this.isProtectedAdminEmail(users[idx].email)) return;
+
+    users[idx] = { ...users[idx], isBlocked };
+    this.setToStorage(this.USERS_KEY, users);
+  }
+
+  getAdminIds(): string[] {
+    return this.getUsers()
+      .filter((user) => user.role === 'admin')
+      .map((user) => user.id);
   }
 
   // Stories
@@ -171,7 +282,10 @@ export class ProjectService {
   }
 
   addTask(
-    task: Omit<Task, 'id' | 'addedAt' | 'startAt' | 'endAt' | 'actualHours' | 'state' | 'responsibleUserId'>
+    task: Omit<
+      Task,
+      'id' | 'addedAt' | 'startAt' | 'endAt' | 'actualHours' | 'state' | 'responsibleUserId'
+    >,
   ): void {
     const all = this.getTasks();
     const newTask: Task = {
@@ -347,6 +461,88 @@ export class ProjectService {
       priority,
       recipientId: story.ownerId,
     });
+  }
+
+  private notifyNewUserCreated(user: User): void {
+    const adminIds = this.getAdminIds().filter((id) => id !== user.id);
+    if (adminIds.length === 0) return;
+
+    this.notificationService.sendToUsers(adminIds, {
+      title: 'Tworzenie nowego konta w systemie',
+      message: `Użytkownik ${user.firstName} ${user.lastName} (${user.email}) utworzył konto.`,
+      priority: 'high',
+    });
+  }
+
+  private normalizeUser(input: unknown): User | null {
+    if (!input || typeof input !== 'object') return null;
+
+    const record = input as Record<string, unknown>;
+    if (
+      typeof record['id'] !== 'string' ||
+      typeof record['email'] !== 'string' ||
+      typeof record['firstName'] !== 'string' ||
+      typeof record['lastName'] !== 'string' ||
+      !this.isUserRole(record['role']) ||
+      typeof record['isBlocked'] !== 'boolean' ||
+      typeof record['createdAt'] !== 'string' ||
+      typeof record['lastLoginAt'] !== 'string'
+    ) {
+      return null;
+    }
+
+    return {
+      id: record['id'],
+      email: record['email'].trim().toLowerCase(),
+      firstName: record['firstName'].trim() || 'Użytkownik',
+      lastName: record['lastName'].trim() || 'Systemu',
+      role: this.isProtectedAdminEmail(record['email']) ? 'admin' : record['role'],
+      isBlocked: this.isProtectedAdminEmail(record['email']) ? false : record['isBlocked'],
+      createdAt: record['createdAt'],
+      lastLoginAt: record['lastLoginAt'],
+    };
+  }
+
+  private isUserRole(value: unknown): value is UserRole {
+    return value === 'admin' || value === 'devops' || value === 'developer' || value === 'guest';
+  }
+
+  private resolveNames(profile: OAuthProfile): { firstName: string; lastName: string } {
+    const firstNameFromProfile = profile.firstName?.trim();
+    const lastNameFromProfile = profile.lastName?.trim();
+
+    if (firstNameFromProfile) {
+      return {
+        firstName: firstNameFromProfile,
+        lastName: lastNameFromProfile || 'Użytkownik',
+      };
+    }
+
+    const fullName = (profile.fullName ?? '').trim();
+    if (!fullName) {
+      return { firstName: 'Użytkownik', lastName: 'Systemu' };
+    }
+
+    const parts = fullName.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+      return { firstName: parts[0], lastName: 'Użytkownik' };
+    }
+
+    const firstName = parts[0];
+    const lastName = parts.slice(1).join(' ');
+    return { firstName, lastName };
+  }
+
+  private isSuperAdminEmail(email: string): boolean {
+    return email.trim().toLowerCase() === SUPER_ADMIN_EMAIL.trim().toLowerCase();
+  }
+
+  private isLocalAdminEmail(email: string): boolean {
+    return email.trim().toLowerCase() === LOCAL_ADMIN_EMAIL.trim().toLowerCase();
+  }
+
+  private isProtectedAdminEmail(email: string): boolean {
+    return this.isSuperAdminEmail(email) || this.isLocalAdminEmail(email);
   }
 
   private mapDomainPriority(value: 'niski' | 'średni' | 'wysoki'): NotificationPriority {
