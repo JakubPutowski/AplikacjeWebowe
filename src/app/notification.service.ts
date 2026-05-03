@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
+import { useAppStorage } from './app-storage';
 import { Notification, NotificationPriority, UserID } from './notification.model';
 
 type CreateNotificationInput = {
@@ -12,12 +13,27 @@ type CreateNotificationInput = {
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
   private readonly STORAGE_KEY = 'notifications_data';
+  private storage = useAppStorage();
+  private notifications: Notification[] = [];
+  private initialized = false;
+  private initializingPromise: Promise<void> | null = null;
 
   private createdSubject = new Subject<Notification>();
   private changedSubject = new Subject<void>();
 
   readonly created$ = this.createdSubject.asObservable();
   readonly changed$ = this.changedSubject.asObservable();
+
+  initialize(): Promise<void> {
+    if (this.initialized) return Promise.resolve();
+    if (this.initializingPromise) return this.initializingPromise;
+
+    this.initializingPromise = this.loadNotifications().finally(() => {
+      this.initializingPromise = null;
+    });
+
+    return this.initializingPromise;
+  }
 
   getNotificationsForRecipient(recipientId: UserID): Notification[] {
     return this.getAll()
@@ -99,30 +115,34 @@ export class NotificationService {
   }
 
   private getAll(): Notification[] {
-    const raw = localStorage.getItem(this.STORAGE_KEY);
-    if (!raw) return [];
-
-    try {
-      const parsed = JSON.parse(raw) as Notification[];
-      if (!Array.isArray(parsed)) return [];
-
-      return parsed.filter(
-        (item) =>
-          typeof item.id === 'string' &&
-          typeof item.title === 'string' &&
-          typeof item.message === 'string' &&
-          typeof item.date === 'string' &&
-          (item.priority === 'low' || item.priority === 'medium' || item.priority === 'high') &&
-          typeof item.isRead === 'boolean' &&
-          typeof item.recipientId === 'string'
-      );
-    } catch {
-      return [];
-    }
+    return this.notifications;
   }
 
   private saveAll(value: Notification[]): void {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(value));
+    this.notifications = value;
+    void this.storage.set(this.STORAGE_KEY, value);
     this.changedSubject.next();
+  }
+
+  private async loadNotifications(): Promise<void> {
+    const raw = await this.storage.get<unknown[]>(this.STORAGE_KEY, []);
+    const parsed = Array.isArray(raw) ? raw : [];
+
+    this.notifications = parsed.filter(
+      (item): item is Notification =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as Notification).id === 'string' &&
+        typeof (item as Notification).title === 'string' &&
+        typeof (item as Notification).message === 'string' &&
+        typeof (item as Notification).date === 'string' &&
+        ((item as Notification).priority === 'low' ||
+          (item as Notification).priority === 'medium' ||
+          (item as Notification).priority === 'high') &&
+        typeof (item as Notification).isRead === 'boolean' &&
+        typeof (item as Notification).recipientId === 'string',
+    );
+
+    this.initialized = true;
   }
 }
