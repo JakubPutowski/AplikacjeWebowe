@@ -94,7 +94,7 @@ describe('ProjectService', () => {
     expect(result).toBeTruthy();
     expect(result?.user.role).toBe('admin');
     expect(result?.user.isBlocked).toBe(false);
-    expect(result?.user.email).toBe(LOCAL_ADMIN_EMAIL);
+    expect(result?.user.email).toBe(LOCAL_ADMIN_EMAIL.toLowerCase());
   });
 
   it('rejects local admin login with invalid credentials', () => {

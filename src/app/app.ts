@@ -52,6 +52,7 @@ export class App implements OnInit, OnDestroy {
 
   private notificationCreatedSub?: Subscription;
   private notificationChangedSub?: Subscription;
+  private dataReadyPromise: Promise<void> | null = null;
 
   currentUser = signal<User | null>(null);
   users = signal<User[]>([]);
@@ -92,9 +93,8 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.themeMode.set(this.themeService.init());
-    this.refreshList();
-    this.refreshUsers();
-    this.hydrateSession();
+    this.dataReadyPromise = this.bootstrapData();
+    void this.dataReadyPromise;
 
     this.notificationCreatedSub = this.notificationService.created$.subscribe((notification) => {
       this.refreshNotifications();
@@ -124,6 +124,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   async signInWithGithub() {
+    await this.ensureDataReady();
     this.oauthAuthError.set(null);
     this.localAuthError.set(null);
     if (!this.isGithubAuthConfigured()) {
@@ -148,7 +149,8 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  signInAsLocalAdmin() {
+  async signInAsLocalAdmin() {
+    await this.ensureDataReady();
     this.localAuthError.set(null);
 
     const loginResult = this.projectService.loginWithLocalAdmin({
@@ -174,6 +176,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   async signOut() {
+    await this.ensureDataReady();
     this.projectService.clearCurrentUser();
 
     try {
@@ -650,5 +653,20 @@ export class App implements OnInit, OnDestroy {
     this.stories.set([]);
     this.tasks.set([]);
     this.selectedNotificationId.set(null);
+  }
+
+  private async bootstrapData(): Promise<void> {
+    await Promise.all([this.projectService.initialize(), this.notificationService.initialize()]);
+    this.refreshList();
+    this.refreshUsers();
+    this.hydrateSession();
+  }
+
+  private async ensureDataReady(): Promise<void> {
+    if (!this.dataReadyPromise) {
+      this.dataReadyPromise = this.bootstrapData();
+    }
+
+    await this.dataReadyPromise;
   }
 }

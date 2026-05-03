@@ -1,14 +1,15 @@
 import { inject, Injectable } from '@angular/core';
-import { ProjectModel, Story, StoryState, User, UserRole } from './project.model';
-import { Task } from './task.model';
-import { NotificationPriority } from './notification.model';
-import { NotificationService } from './notification.service';
+import { useAppStorage } from './app-storage';
 import {
   LOCAL_ADMIN_EMAIL,
   LOCAL_ADMIN_LOGIN,
   LOCAL_ADMIN_PASSWORD,
   SUPER_ADMIN_EMAIL,
 } from './auth.config';
+import { NotificationPriority } from './notification.model';
+import { NotificationService } from './notification.service';
+import { ProjectModel, Story, StoryState, User, UserRole } from './project.model';
+import { Task } from './task.model';
 
 type OAuthProfile = {
   email: string;
@@ -24,100 +25,98 @@ type LocalAdminCredentials = {
 
 @Injectable({ providedIn: 'root' })
 export class ProjectService {
+  private storage = useAppStorage();
   private notificationService = inject(NotificationService);
 
   private readonly LS_KEY = 'projects_data';
   private readonly STORIES_KEY = 'stories_data';
   private readonly CURRENT_PROJ_KEY = 'current_project_id';
-
   private readonly TASKS_KEY = 'tasks_data';
   private readonly USERS_KEY = 'users_data';
   private readonly CURRENT_USER_KEY = 'current_user_id';
 
-  private getFromStorage<T>(key: string, fallback: T): T {
-    const data = localStorage.getItem(key);
-    if (!data) return fallback;
-    try {
-      return JSON.parse(data) as T;
-    } catch {
-      return fallback;
-    }
-  }
+  private projects: ProjectModel[] = [];
+  private stories: Story[] = [];
+  private tasks: Task[] = [];
+  private users: User[] = [];
+  private currentProjectId: string | null = null;
+  private currentUserId: string | null = null;
 
-  private setToStorage<T>(key: string, value: T): void {
-    localStorage.setItem(key, JSON.stringify(value));
+  private initialized = false;
+  private initializingPromise: Promise<void> | null = null;
+
+  initialize(): Promise<void> {
+    if (this.initialized) return Promise.resolve();
+    if (this.initializingPromise) return this.initializingPromise;
+
+    this.initializingPromise = this.loadState().finally(() => {
+      this.initializingPromise = null;
+    });
+
+    return this.initializingPromise;
   }
 
   getProjects(): ProjectModel[] {
-    return this.getFromStorage<ProjectModel[]>(this.LS_KEY, []);
+    return [...this.projects];
   }
 
   saveProject(project: Omit<ProjectModel, 'id'>): void {
-    const projects = this.getProjects();
     const newProject = { ...project, id: crypto.randomUUID() };
-    this.setToStorage(this.LS_KEY, [...projects, newProject]);
-
+    this.projects = [...this.projects, newProject];
+    this.persistProjects();
     this.notifyProjectCreated(newProject.name);
   }
 
   deleteProject(id: string): void {
-    const projects = this.getProjects().filter((p) => p.id !== id);
-    this.setToStorage(this.LS_KEY, projects);
+    this.projects = this.projects.filter((p) => p.id !== id);
+    this.persistProjects();
 
-    // Cascade: usuwamy powiązane story oraz zadania.
-    const storyIdsToDelete = this.getStories()
+    const storyIdsToDelete = this.stories
       .filter((s) => s.projectId === id)
       .map((s) => s.id);
-    if (storyIdsToDelete.length > 0) {
-      const storiesRemaining = this.getStories().filter((s) => s.projectId !== id);
-      this.setToStorage(this.STORIES_KEY, storiesRemaining);
 
-      const tasksRemaining = this.getTasks().filter((t) => !storyIdsToDelete.includes(t.storyId));
-      this.setToStorage(this.TASKS_KEY, tasksRemaining);
+    if (storyIdsToDelete.length > 0) {
+      this.stories = this.stories.filter((s) => s.projectId !== id);
+      this.persistStories();
+
+      this.tasks = this.tasks.filter((t) => !storyIdsToDelete.includes(t.storyId));
+      this.persistTasks();
     }
 
-    const currentProjectId = this.getCurrentProjectId();
-    if (currentProjectId === id) {
-      localStorage.removeItem(this.CURRENT_PROJ_KEY);
+    if (this.currentProjectId === id) {
+      this.currentProjectId = null;
+      this.persistCurrentProjectId();
     }
   }
 
   setCurrentProjectId(id: string): void {
-    localStorage.setItem(this.CURRENT_PROJ_KEY, id);
+    this.currentProjectId = id;
+    this.persistCurrentProjectId();
   }
 
   getCurrentProjectId(): string | null {
-    return localStorage.getItem(this.CURRENT_PROJ_KEY);
+    return this.currentProjectId;
   }
 
-  // Users / auth (lokalnie)
   getUsers(): User[] {
-    const rawUsers = this.getFromStorage<unknown[]>(this.USERS_KEY, []);
-    const normalizedUsers = rawUsers
-      .map((item) => this.normalizeUser(item))
-      .filter((item): item is User => item !== null);
-
-    this.setToStorage(this.USERS_KEY, normalizedUsers);
-    return normalizedUsers;
+    return [...this.users];
   }
 
   getCurrentUser(): User | null {
-    const users = this.getUsers();
-    const currentId = localStorage.getItem(this.CURRENT_USER_KEY);
-    if (!currentId) return null;
-    return users.find((u) => u.id === currentId) ?? null;
+    if (!this.currentUserId) return null;
+    return this.users.find((u) => u.id === this.currentUserId) ?? null;
   }
 
   clearCurrentUser(): void {
-    localStorage.removeItem(this.CURRENT_USER_KEY);
+    this.currentUserId = null;
+    this.persistCurrentUserId();
   }
 
   loginWithOAuth(profile: OAuthProfile): { user: User; isNew: boolean } {
     const normalizedEmail = profile.email.trim().toLowerCase();
-    const users = this.getUsers();
     const now = new Date().toISOString();
-
     const name = this.resolveNames(profile);
+    const users = [...this.users];
     const existingIdx = users.findIndex((user) => user.email.toLowerCase() === normalizedEmail);
 
     if (existingIdx !== -1) {
@@ -131,9 +130,10 @@ export class ProjectService {
       };
 
       users[existingIdx] = updated;
-      this.setToStorage(this.USERS_KEY, users);
-      localStorage.setItem(this.CURRENT_USER_KEY, updated.id);
-
+      this.users = users;
+      this.currentUserId = updated.id;
+      this.persistUsers();
+      this.persistCurrentUserId();
       return { user: updated, isNew: false };
     }
 
@@ -148,10 +148,10 @@ export class ProjectService {
       lastLoginAt: now,
     };
 
-    const next = [...users, created];
-    this.setToStorage(this.USERS_KEY, next);
-    localStorage.setItem(this.CURRENT_USER_KEY, created.id);
-
+    this.users = [...users, created];
+    this.currentUserId = created.id;
+    this.persistUsers();
+    this.persistCurrentUserId();
     this.notifyNewUserCreated(created);
 
     return { user: created, isNew: true };
@@ -163,9 +163,9 @@ export class ProjectService {
       return null;
     }
 
-    const users = this.getUsers();
     const now = new Date().toISOString();
     const localAdminEmail = LOCAL_ADMIN_EMAIL.trim().toLowerCase();
+    const users = [...this.users];
     const existingIdx = users.findIndex((user) => user.email.toLowerCase() === localAdminEmail);
 
     if (existingIdx !== -1) {
@@ -181,8 +181,10 @@ export class ProjectService {
       };
 
       users[existingIdx] = updated;
-      this.setToStorage(this.USERS_KEY, users);
-      localStorage.setItem(this.CURRENT_USER_KEY, updated.id);
+      this.users = users;
+      this.currentUserId = updated.id;
+      this.persistUsers();
+      this.persistCurrentUserId();
       return { user: updated, isNew: false };
     }
 
@@ -197,88 +199,80 @@ export class ProjectService {
       lastLoginAt: now,
     };
 
-    const next = [...users, created];
-    this.setToStorage(this.USERS_KEY, next);
-    localStorage.setItem(this.CURRENT_USER_KEY, created.id);
-
+    this.users = [...users, created];
+    this.currentUserId = created.id;
+    this.persistUsers();
+    this.persistCurrentUserId();
     this.notifyNewUserCreated(created);
-
     return { user: created, isNew: true };
   }
 
   updateUserRole(userId: string, role: UserRole): void {
-    const users = this.getUsers();
+    const users = [...this.users];
     const idx = users.findIndex((u) => u.id === userId);
     if (idx === -1) return;
 
-    if (this.isProtectedAdminEmail(users[idx].email)) {
-      users[idx] = { ...users[idx], role: 'admin' };
-    } else {
-      users[idx] = { ...users[idx], role };
-    }
+    users[idx] = this.isProtectedAdminEmail(users[idx].email)
+      ? { ...users[idx], role: 'admin' }
+      : { ...users[idx], role };
 
-    this.setToStorage(this.USERS_KEY, users);
+    this.users = users;
+    this.persistUsers();
   }
 
   setUserBlocked(userId: string, isBlocked: boolean): void {
-    const users = this.getUsers();
+    const users = [...this.users];
     const idx = users.findIndex((u) => u.id === userId);
     if (idx === -1) return;
-
     if (this.isProtectedAdminEmail(users[idx].email)) return;
 
     users[idx] = { ...users[idx], isBlocked };
-    this.setToStorage(this.USERS_KEY, users);
+    this.users = users;
+    this.persistUsers();
   }
 
   getAdminIds(): string[] {
-    return this.getUsers()
-      .filter((user) => user.role === 'admin')
-      .map((user) => user.id);
+    return this.users.filter((user) => user.role === 'admin').map((user) => user.id);
   }
 
-  // Stories
   getStories(): Story[] {
-    return this.getFromStorage<Story[]>(this.STORIES_KEY, []);
+    return [...this.stories];
   }
 
   getStoriesForProject(projectId: string): Story[] {
-    return this.getStories().filter((s) => s.projectId === projectId);
+    return this.stories.filter((s) => s.projectId === projectId);
   }
 
   addStory(story: Omit<Story, 'id' | 'createdAt'>): void {
-    const all = this.getStories();
     const newStory: Story = {
       ...story,
       id: crypto.randomUUID(),
       createdAt: new Date(),
     };
-    this.setToStorage(this.STORIES_KEY, [...all, newStory]);
 
+    this.stories = [...this.stories, newStory];
+    this.persistStories();
     this.notifyStoryAssigned(newStory);
   }
 
   deleteStory(storyId: string): void {
-    const allStories = this.getStories();
-    const filteredStories = allStories.filter((s) => s.id !== storyId);
-    this.setToStorage(this.STORIES_KEY, filteredStories);
+    this.stories = this.stories.filter((s) => s.id !== storyId);
+    this.persistStories();
 
-    // Cascade: usuń też zadania przypisane do story.
-    const filteredTasks = this.getTasks().filter((t) => t.storyId !== storyId);
-    this.setToStorage(this.TASKS_KEY, filteredTasks);
+    this.tasks = this.tasks.filter((t) => t.storyId !== storyId);
+    this.persistTasks();
   }
 
-  // Tasks
   getTasks(): Task[] {
-    return this.getFromStorage<Task[]>(this.TASKS_KEY, []);
+    return [...this.tasks];
   }
 
   getTasksForStory(storyId: string): Task[] {
-    return this.getTasks().filter((t) => t.storyId === storyId);
+    return this.tasks.filter((t) => t.storyId === storyId);
   }
 
   getTask(taskId: string): Task | null {
-    return this.getTasks().find((t) => t.id === taskId) ?? null;
+    return this.tasks.find((t) => t.id === taskId) ?? null;
   }
 
   addTask(
@@ -287,7 +281,6 @@ export class ProjectService {
       'id' | 'addedAt' | 'startAt' | 'endAt' | 'actualHours' | 'state' | 'responsibleUserId'
     >,
   ): void {
-    const all = this.getTasks();
     const newTask: Task = {
       ...task,
       id: crypto.randomUUID(),
@@ -298,11 +291,10 @@ export class ProjectService {
       actualHours: null,
       responsibleUserId: null,
     };
-    this.setToStorage(this.TASKS_KEY, [...all, newTask]);
-    // Po dodaniu zadania story musi się przeliczyć:
-    // jeśli historyjka była w `done`, dodanie nowego taska (todo) ma ją cofnąć do `doing`.
-    this.recalcStoryState(newTask.storyId);
 
+    this.tasks = [...this.tasks, newTask];
+    this.persistTasks();
+    this.recalcStoryState(newTask.storyId);
     this.notifyTaskAdded(newTask);
   }
 
@@ -310,11 +302,9 @@ export class ProjectService {
     const task = this.getTask(taskId);
     if (!task) return;
 
-    const filtered = this.getTasks().filter((t) => t.id !== taskId);
-    this.setToStorage(this.TASKS_KEY, filtered);
-
+    this.tasks = this.tasks.filter((t) => t.id !== taskId);
+    this.persistTasks();
     this.recalcStoryState(task.storyId);
-
     this.notifyTaskDeleted(task);
   }
 
@@ -332,12 +322,9 @@ export class ProjectService {
       actualHours: null,
     };
 
-    const all = this.getTasks();
-    const next = all.map((t) => (t.id === taskId ? updated : t));
-    this.setToStorage(this.TASKS_KEY, next);
-
+    this.tasks = this.tasks.map((t) => (t.id === taskId ? updated : t));
+    this.persistTasks();
     this.recalcStoryState(task.storyId);
-
     this.notifyTaskAssigned(updated);
     this.notifyTaskStatusChanged(updated, 'doing');
   }
@@ -348,7 +335,6 @@ export class ProjectService {
 
     const end = new Date();
     const start = new Date(task.startAt);
-
     const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
     const roundedHours = Math.round(hours * 100) / 100;
 
@@ -359,12 +345,9 @@ export class ProjectService {
       actualHours: roundedHours,
     };
 
-    const all = this.getTasks();
-    const next = all.map((t) => (t.id === taskId ? updated : t));
-    this.setToStorage(this.TASKS_KEY, next);
-
+    this.tasks = this.tasks.map((t) => (t.id === taskId ? updated : t));
+    this.persistTasks();
     this.recalcStoryState(task.storyId);
-
     this.notifyTaskStatusChanged(updated, 'done');
   }
 
@@ -379,35 +362,32 @@ export class ProjectService {
     } else if (tasks.every((t) => t.state === 'todo')) {
       newState = 'todo';
     } else {
-      // Co najmniej jedno zadanie jest w doing lub done, ale nie wszystkie są done.
       newState = 'doing';
     }
 
-    const stories = this.getStories();
-    const idx = stories.findIndex((s) => s.id === storyId);
+    const idx = this.stories.findIndex((s) => s.id === storyId);
     if (idx === -1) return;
+    if (this.stories[idx].state === newState) return;
 
-    if (stories[idx].state === newState) return;
+    const stories = [...this.stories];
     stories[idx] = { ...stories[idx], state: newState };
-    this.setToStorage(this.STORIES_KEY, stories);
+    this.stories = stories;
+    this.persistStories();
   }
 
   private notifyProjectCreated(projectName: string): void {
-    const adminIds = this.getUsers()
-      .filter((user) => user.role === 'admin')
-      .map((user) => user.id);
-
-    this.notificationService.sendToUsers(adminIds, {
+    const adminIds = this.users.filter((user) => user.role === 'admin').map((user) => user.id);
+    void this.notificationService.sendToUsers(adminIds, {
       title: 'Utworzono nowy projekt',
-      message: `Projekt \"${projectName}\" został utworzony.`,
+      message: `Projekt "${projectName}" został utworzony.`,
       priority: 'high',
     });
   }
 
   private notifyStoryAssigned(story: Story): void {
-    this.notificationService.sendToUser({
+    void this.notificationService.sendToUser({
       title: 'Przypisanie do historyjki',
-      message: `Zostałeś przypisany do historyjki \"${story.name}\".`,
+      message: `Zostałeś przypisany do historyjki "${story.name}".`,
       priority: this.mapDomainPriority(story.priority),
       recipientId: story.ownerId,
     });
@@ -416,48 +396,48 @@ export class ProjectService {
   private notifyTaskAssigned(task: Task): void {
     if (!task.responsibleUserId) return;
 
-    this.notificationService.sendToUser({
+    void this.notificationService.sendToUser({
       title: 'Przypisanie do zadania',
-      message: `Przypisano Ci zadanie \"${task.name}\".`,
+      message: `Przypisano Ci zadanie "${task.name}".`,
       priority: this.mapDomainPriority(task.priority),
       recipientId: task.responsibleUserId,
     });
   }
 
   private notifyTaskAdded(task: Task): void {
-    const story = this.getStories().find((item) => item.id === task.storyId);
+    const story = this.stories.find((item) => item.id === task.storyId);
     if (!story) return;
 
-    this.notificationService.sendToUser({
+    void this.notificationService.sendToUser({
       title: 'Nowe zadanie w historyjce',
-      message: `Dodano zadanie \"${task.name}\" w historyjce \"${story.name}\".`,
+      message: `Dodano zadanie "${task.name}" w historyjce "${story.name}".`,
       priority: this.mapDomainPriority(task.priority),
       recipientId: story.ownerId,
     });
   }
 
   private notifyTaskDeleted(task: Task): void {
-    const story = this.getStories().find((item) => item.id === task.storyId);
+    const story = this.stories.find((item) => item.id === task.storyId);
     if (!story) return;
 
-    this.notificationService.sendToUser({
+    void this.notificationService.sendToUser({
       title: 'Usunięto zadanie z historyjki',
-      message: `Usunięto zadanie \"${task.name}\" z historyjki \"${story.name}\".`,
+      message: `Usunięto zadanie "${task.name}" z historyjki "${story.name}".`,
       priority: this.mapDomainPriority(task.priority),
       recipientId: story.ownerId,
     });
   }
 
   private notifyTaskStatusChanged(task: Task, nextState: 'doing' | 'done'): void {
-    const story = this.getStories().find((item) => item.id === task.storyId);
+    const story = this.stories.find((item) => item.id === task.storyId);
     if (!story) return;
 
     const priority = nextState === 'done' ? 'medium' : 'low';
     const statusLabel = nextState === 'done' ? 'DONE' : 'DOING';
 
-    this.notificationService.sendToUser({
+    void this.notificationService.sendToUser({
       title: 'Zmiana statusu zadania',
-      message: `Zadanie \"${task.name}\" zmieniło status na ${statusLabel}.`,
+      message: `Zadanie "${task.name}" zmieniło status na ${statusLabel}.`,
       priority,
       recipientId: story.ownerId,
     });
@@ -467,7 +447,7 @@ export class ProjectService {
     const adminIds = this.getAdminIds().filter((id) => id !== user.id);
     if (adminIds.length === 0) return;
 
-    this.notificationService.sendToUsers(adminIds, {
+    void this.notificationService.sendToUsers(adminIds, {
       title: 'Tworzenie nowego konta w systemie',
       message: `Użytkownik ${user.firstName} ${user.lastName} (${user.email}) utworzył konto.`,
       priority: 'high',
@@ -528,9 +508,7 @@ export class ProjectService {
       return { firstName: parts[0], lastName: 'Użytkownik' };
     }
 
-    const firstName = parts[0];
-    const lastName = parts.slice(1).join(' ');
-    return { firstName, lastName };
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
   }
 
   private isSuperAdminEmail(email: string): boolean {
@@ -549,5 +527,57 @@ export class ProjectService {
     if (value === 'wysoki') return 'high';
     if (value === 'średni') return 'medium';
     return 'low';
+  }
+
+  private async loadState(): Promise<void> {
+    this.projects = await this.storage.get<ProjectModel[]>(this.LS_KEY, []);
+    this.stories = await this.storage.get<Story[]>(this.STORIES_KEY, []);
+    this.tasks = await this.storage.get<Task[]>(this.TASKS_KEY, []);
+
+    const rawUsers = await this.storage.get<unknown[]>(this.USERS_KEY, []);
+    this.users = rawUsers.map((item) => this.normalizeUser(item)).filter((item): item is User => item !== null);
+    void this.storage.set(this.USERS_KEY, this.users);
+
+    const currentProjectId = await this.storage.get<string | null>(this.CURRENT_PROJ_KEY, null);
+    this.currentProjectId = typeof currentProjectId === 'string' ? currentProjectId : null;
+
+    const currentUserId = await this.storage.get<string | null>(this.CURRENT_USER_KEY, null);
+    this.currentUserId = typeof currentUserId === 'string' ? currentUserId : null;
+
+    this.initialized = true;
+  }
+
+  private persistProjects(): void {
+    void this.storage.set(this.LS_KEY, this.projects);
+  }
+
+  private persistStories(): void {
+    void this.storage.set(this.STORIES_KEY, this.stories);
+  }
+
+  private persistTasks(): void {
+    void this.storage.set(this.TASKS_KEY, this.tasks);
+  }
+
+  private persistUsers(): void {
+    void this.storage.set(this.USERS_KEY, this.users);
+  }
+
+  private persistCurrentProjectId(): void {
+    if (!this.currentProjectId) {
+      void this.storage.remove(this.CURRENT_PROJ_KEY);
+      return;
+    }
+
+    void this.storage.set(this.CURRENT_PROJ_KEY, this.currentProjectId);
+  }
+
+  private persistCurrentUserId(): void {
+    if (!this.currentUserId) {
+      void this.storage.remove(this.CURRENT_USER_KEY);
+      return;
+    }
+
+    void this.storage.set(this.CURRENT_USER_KEY, this.currentUserId);
   }
 }

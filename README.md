@@ -30,6 +30,21 @@ To configure GitHub OAuth:
 
 Note: local admin authentication is client-side only and should be treated as a development/demo feature.
 
+## Data storage mode
+
+Application data storage mode is configured in `src/app/storage.config.ts`:
+
+- `STORAGE_MODE = 'local'` - uses browser localStorage.
+- `STORAGE_MODE = 'firestore'` - uses Firebase Firestore collection `app_state`.
+
+For Firestore mode:
+
+1. In Firebase Console enable Firestore Database for your project.
+2. Fill `FIREBASE_CONFIG` in `src/app/auth.config.ts`.
+3. Set `STORAGE_MODE` to `'firestore'` in `src/app/storage.config.ts`.
+
+When `STORAGE_MODE` is `firestore` and `FIREBASE_CONFIG` is not set, app falls back to localStorage.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
