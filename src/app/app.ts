@@ -86,6 +86,10 @@ export class App implements OnInit, OnDestroy {
   taskPriority: TaskPriority = 'średni';
   taskExpectedHours = 1;
 
+  editingProjectId = signal<string | null>(null);
+  editingStoryId = signal<string | null>(null);
+  editingTaskId = signal<string | null>(null);
+
   localAdminLogin = '';
   localAdminPassword = '';
   localAuthError = signal<string | null>(null);
@@ -287,13 +291,21 @@ export class App implements OnInit, OnDestroy {
   addProject() {
     if (!this.hasAppAccess()) return;
     if (this.projectName.trim()) {
-      this.projectService.saveProject({
+      const editingId = this.editingProjectId();
+      const payload = {
         name: this.projectName,
         description: this.projectDesc,
-      });
+      };
+
+      if (editingId) {
+        this.projectService.updateProject(editingId, payload);
+      } else {
+        this.projectService.saveProject(payload);
+      }
 
       this.projectName = '';
       this.projectDesc = '';
+      this.editingProjectId.set(null);
 
       this.refreshList();
     }
@@ -302,6 +314,9 @@ export class App implements OnInit, OnDestroy {
   deleteProject(id: string) {
     if (!this.hasAppAccess()) return;
     this.projectService.deleteProject(id);
+    if (this.editingProjectId() === id) {
+      this.cancelProjectEdit();
+    }
     this.refreshList();
     this.resetProjectContext();
   }
@@ -312,6 +327,8 @@ export class App implements OnInit, OnDestroy {
     this.currentProjectId.set(id);
     this.currentStoryId.set(null);
     this.selectedTaskId.set(null);
+    this.editingStoryId.set(null);
+    this.editingTaskId.set(null);
     this.refreshStories();
     this.refreshTasks();
   }
@@ -326,18 +343,28 @@ export class App implements OnInit, OnDestroy {
     if (!this.hasAppAccess() || !user) return;
 
     if (this.storyName.trim() && pId) {
-      this.projectService.addStory({
-        name: this.storyName,
-        description: this.storyDesc,
-        priority: this.storyPriority,
-        projectId: pId,
-        state: 'todo',
-        ownerId: user.id,
-      });
+      const editingId = this.editingStoryId();
+      if (editingId) {
+        this.projectService.updateStory(editingId, {
+          name: this.storyName,
+          description: this.storyDesc,
+          priority: this.storyPriority,
+        });
+      } else {
+        this.projectService.addStory({
+          name: this.storyName,
+          description: this.storyDesc,
+          priority: this.storyPriority,
+          projectId: pId,
+          state: 'todo',
+          ownerId: user.id,
+        });
+      }
 
       this.storyName = '';
       this.storyDesc = '';
       this.storyPriority = 'średni';
+      this.editingStoryId.set(null);
       this.refreshStories();
     }
   }
@@ -346,9 +373,13 @@ export class App implements OnInit, OnDestroy {
     if (!this.hasAppAccess()) return;
     if (confirm('Czy na pewno chcesz usunąć tę historyjkę?')) {
       this.projectService.deleteStory(storyId);
+      if (this.editingStoryId() === storyId) {
+        this.cancelStoryEdit();
+      }
       if (this.currentStoryId() === storyId) {
         this.currentStoryId.set(null);
         this.selectedTaskId.set(null);
+        this.editingTaskId.set(null);
       }
       this.refreshStories();
       this.refreshTasks();
@@ -359,6 +390,7 @@ export class App implements OnInit, OnDestroy {
     if (!this.hasAppAccess()) return;
     this.currentStoryId.set(storyId);
     this.selectedTaskId.set(null);
+    this.editingTaskId.set(null);
     this.refreshTasks();
   }
 
@@ -384,18 +416,29 @@ export class App implements OnInit, OnDestroy {
     const expectedHours = Number(this.taskExpectedHours);
     if (!Number.isFinite(expectedHours) || expectedHours <= 0) return;
 
-    this.projectService.addTask({
-      name: this.taskName,
-      description: this.taskDesc,
-      priority: this.taskPriority,
-      storyId: sId,
-      expectedHours,
-    });
+    const editingId = this.editingTaskId();
+    if (editingId) {
+      this.projectService.updateTask(editingId, {
+        name: this.taskName,
+        description: this.taskDesc,
+        priority: this.taskPriority,
+        expectedHours,
+      });
+    } else {
+      this.projectService.addTask({
+        name: this.taskName,
+        description: this.taskDesc,
+        priority: this.taskPriority,
+        storyId: sId,
+        expectedHours,
+      });
+    }
 
     this.taskName = '';
     this.taskDesc = '';
     this.taskPriority = 'średni';
     this.taskExpectedHours = 1;
+    this.editingTaskId.set(null);
 
     this.refreshTasks();
     this.refreshStories();
@@ -406,6 +449,9 @@ export class App implements OnInit, OnDestroy {
     if (!confirm('Czy na pewno chcesz usunąć to zadanie?')) return;
 
     this.projectService.deleteTask(taskId);
+    if (this.editingTaskId() === taskId) {
+      this.cancelTaskEdit();
+    }
     if (this.selectedTaskId() === taskId) this.selectedTaskId.set(null);
     this.refreshTasks();
     this.refreshStories();
@@ -459,6 +505,60 @@ export class App implements OnInit, OnDestroy {
 
   clearSelectedTask() {
     this.selectedTaskId.set(null);
+  }
+
+  startProjectEdit(projectId: string) {
+    if (!this.hasAppAccess()) return;
+    const project = this.projects().find((item) => item.id === projectId);
+    if (!project) return;
+
+    this.editingProjectId.set(project.id);
+    this.projectName = project.name;
+    this.projectDesc = project.description;
+  }
+
+  cancelProjectEdit() {
+    this.editingProjectId.set(null);
+    this.projectName = '';
+    this.projectDesc = '';
+  }
+
+  startStoryEdit(storyId: string) {
+    if (!this.hasAppAccess()) return;
+    const story = this.stories().find((item) => item.id === storyId);
+    if (!story) return;
+
+    this.editingStoryId.set(story.id);
+    this.storyName = story.name;
+    this.storyDesc = story.description;
+    this.storyPriority = story.priority;
+  }
+
+  cancelStoryEdit() {
+    this.editingStoryId.set(null);
+    this.storyName = '';
+    this.storyDesc = '';
+    this.storyPriority = 'średni';
+  }
+
+  startTaskEdit(taskId: string) {
+    if (!this.canManageTasks()) return;
+    const task = this.tasks().find((item) => item.id === taskId);
+    if (!task) return;
+
+    this.editingTaskId.set(task.id);
+    this.taskName = task.name;
+    this.taskDesc = task.description;
+    this.taskPriority = task.priority;
+    this.taskExpectedHours = task.expectedHours;
+  }
+
+  cancelTaskEdit() {
+    this.editingTaskId.set(null);
+    this.taskName = '';
+    this.taskDesc = '';
+    this.taskPriority = 'średni';
+    this.taskExpectedHours = 1;
   }
 
   goToBoard() {
@@ -647,6 +747,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   private resetProjectContext() {
+    this.cancelProjectEdit();
+    this.cancelStoryEdit();
+    this.cancelTaskEdit();
     this.currentProjectId.set(null);
     this.currentStoryId.set(null);
     this.selectedTaskId.set(null);
