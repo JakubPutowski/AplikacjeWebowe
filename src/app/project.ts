@@ -67,6 +67,21 @@ export class ProjectService {
     this.notifyProjectCreated(newProject.name);
   }
 
+  updateProject(projectId: string, changes: Omit<ProjectModel, 'id'>): void {
+    const idx = this.projects.findIndex((project) => project.id === projectId);
+    if (idx === -1) return;
+
+    const next = [...this.projects];
+    next[idx] = {
+      ...next[idx],
+      name: changes.name,
+      description: changes.description,
+    };
+
+    this.projects = next;
+    this.persistProjects();
+  }
+
   deleteProject(id: string): void {
     this.projects = this.projects.filter((p) => p.id !== id);
     this.persistProjects();
@@ -255,6 +270,22 @@ export class ProjectService {
     this.notifyStoryAssigned(newStory);
   }
 
+  updateStory(storyId: string, changes: Pick<Story, 'name' | 'description' | 'priority'>): void {
+    const idx = this.stories.findIndex((story) => story.id === storyId);
+    if (idx === -1) return;
+
+    const next = [...this.stories];
+    next[idx] = {
+      ...next[idx],
+      name: changes.name,
+      description: changes.description,
+      priority: changes.priority,
+    };
+
+    this.stories = next;
+    this.persistStories();
+  }
+
   deleteStory(storyId: string): void {
     this.stories = this.stories.filter((s) => s.id !== storyId);
     this.persistStories();
@@ -296,6 +327,26 @@ export class ProjectService {
     this.persistTasks();
     this.recalcStoryState(newTask.storyId);
     this.notifyTaskAdded(newTask);
+  }
+
+  updateTask(
+    taskId: string,
+    changes: Pick<Task, 'name' | 'description' | 'priority' | 'expectedHours'>,
+  ): void {
+    const idx = this.tasks.findIndex((task) => task.id === taskId);
+    if (idx === -1) return;
+
+    const next = [...this.tasks];
+    next[idx] = {
+      ...next[idx],
+      name: changes.name,
+      description: changes.description,
+      priority: changes.priority,
+      expectedHours: changes.expectedHours,
+    };
+
+    this.tasks = next;
+    this.persistTasks();
   }
 
   deleteTask(taskId: string): void {
