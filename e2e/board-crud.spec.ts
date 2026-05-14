@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { LOCAL_ADMIN_LOGIN, LOCAL_ADMIN_PASSWORD } from '../src/app/auth.config';
 
 const developerUser = {
   id: 'e2e-dev-user-1',
@@ -12,17 +13,35 @@ const developerUser = {
 };
 
 async function closeOverlayIfVisible(page: Page) {
-  const backdrop = page.locator('.cdk-overlay-backdrop.cdk-overlay-backdrop-showing').first();
-  if (await backdrop.isVisible().catch(() => false)) {
-    await backdrop.click({ force: true });
+  await page.keyboard.press('Escape').catch(() => undefined);
+}
+
+async function ensureBoardSession(page: Page) {
+  const projectNameInput = page.getByTestId('project-name-input');
+  try {
+    await expect(projectNameInput).toBeVisible({ timeout: 7000 });
+    return;
+  } catch {
+    // continue to login fallback
   }
+
+  const localLoginButton = page.getByTestId('local-admin-login-btn');
+  if (await localLoginButton.isVisible().catch(() => false)) {
+    await page.getByTestId('local-admin-login-input').fill(LOCAL_ADMIN_LOGIN);
+    await page.getByTestId('local-admin-password-input').fill(LOCAL_ADMIN_PASSWORD);
+    await localLoginButton.click();
+    await expect(projectNameInput).toBeVisible({ timeout: 10000 });
+    return;
+  }
+
+  await expect(projectNameInput).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
   page.on('dialog', (dialog) => dialog.accept());
 
   await page.addInitScript((user) => {
-    if (localStorage.getItem('__e2e_seeded') === 'true') {
+    if (sessionStorage.getItem('__e2e_seeded') === 'true') {
       return;
     }
 
@@ -34,11 +53,11 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('users_data', JSON.stringify([user]));
     localStorage.setItem('current_user_id', user.id);
     localStorage.removeItem('current_project_id');
-    localStorage.setItem('__e2e_seeded', 'true');
+    sessionStorage.setItem('__e2e_seeded', 'true');
   }, developerUser);
 
   await page.goto('/');
-  await expect(page.getByTestId('project-name-input')).toBeVisible();
+  await ensureBoardSession(page);
 });
 
 test('creates, edits, changes status, and deletes board entities', async ({ page }) => {
@@ -60,10 +79,25 @@ test('creates, edits, changes status, and deletes board entities', async ({ page
   expect(projectTestId).toBeTruthy();
   const projectId = projectTestId!.replace('project-card-', '');
 
-  await page.evaluate((id) => {
-    localStorage.setItem('current_project_id', JSON.stringify(id));
+  const selectedViaComponent = await page.evaluate((id) => {
+    const angularApi = (window as unknown as { ng?: { getComponent: (node: Element) => unknown } }).ng;
+    const root = document.querySelector('app-root');
+    if (!angularApi || !root) return false;
+
+    const component = angularApi.getComponent(root) as { selectProject?: (value: string) => void };
+    if (!component || typeof component.selectProject !== 'function') return false;
+
+    component.selectProject(id);
+    return true;
   }, projectId);
-  await page.reload();
+
+  if (!selectedViaComponent) {
+    await closeOverlayIfVisible(page);
+    await page.getByTestId('project-select').click({ force: true });
+    await page.locator(`[data-testid="project-option-${projectId}"]`).click({ force: true });
+    await closeOverlayIfVisible(page);
+  }
+
   await expect(page.getByTestId('story-name-input')).toBeVisible();
   await closeOverlayIfVisible(page);
 
@@ -81,6 +115,7 @@ test('creates, edits, changes status, and deletes board entities', async ({ page
   await closeOverlayIfVisible(page);
   await storyCard.dispatchEvent('click');
   await expect(page.getByTestId('task-name-input')).toBeVisible();
+  await expect(page.getByTestId('task-submit-btn')).toBeEnabled();
 
   await page.getByTestId('task-name-input').fill(taskName);
   await page.getByTestId('task-desc-input').fill('Opis taska E2E');

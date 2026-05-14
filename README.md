@@ -93,6 +93,8 @@ Run end-to-end tests:
 npm run e2e
 ```
 
+Note: e2e tests auto-bootstrap local session data. If app starts on login view (e.g. Firestore mode), tests fall back to local admin login using values from `src/app/auth.config.ts`.
+
 Additional modes:
 
 ```bash
