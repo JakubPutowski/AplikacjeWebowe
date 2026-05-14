@@ -259,7 +259,7 @@ export class App implements OnInit, OnDestroy {
   canManageTasks(): boolean {
     const user = this.currentUser();
     if (!user) return false;
-    if (user.role === 'admin' || user.role === 'guest') return false;
+    if (user.role === 'guest') return false;
     return this.authState() === 'active';
   }
 
